@@ -1,0 +1,25 @@
+<!-- Berechtigungen für AndroidManifest.xml
+     Hinzuzufügen in android/app/src/main/AndroidManifest.xml
+     nach dem <uses-sdk>-Tag und vor <application> -->
+
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />  <!-- Android 13+ -->
+
+<!-- GPS / Standort -->
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" /> <!-- Android 10+ -->
+
+<!-- Foreground-Service für Background-GPS -->
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" /> <!-- Android 14+ -->
+
+<!-- Kamera für QR-Scanner -->
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-feature android:name="android.hardware.camera" android:required="false" />
+
+<!-- Wake Lock (Bildschirm aktiv halten) -->
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+
+<!-- Vibration für Benachrichtigungen -->
+<uses-permission android:name="android.permission.VIBRATE" />

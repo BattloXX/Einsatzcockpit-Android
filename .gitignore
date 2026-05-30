@@ -1,0 +1,7 @@
+node_modules/
+android/
+*.keystore
+!debug.keystore
+google-services.json
+.env
+dist/
