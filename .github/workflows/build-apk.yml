@@ -36,6 +36,51 @@ jobs:
       - name: Capacitor Sync
         run: npx cap sync android
 
+      - name: Patch AndroidManifest (Standort-Berechtigungen)
+        run: |
+          python3 - <<'EOF'
+          import re, sys
+
+          path = "android/app/src/main/AndroidManifest.xml"
+          with open(path, encoding="utf-8") as f:
+              content = f.read()
+
+          PERMISSIONS = [
+              "android.permission.ACCESS_COARSE_LOCATION",
+              "android.permission.ACCESS_FINE_LOCATION",
+              "android.permission.ACCESS_BACKGROUND_LOCATION",
+              "android.permission.FOREGROUND_SERVICE",
+              "android.permission.FOREGROUND_SERVICE_LOCATION",
+          ]
+
+          added = []
+          for perm in PERMISSIONS:
+              tag = f'<uses-permission android:name="{perm}" />'
+              if perm not in content:
+                  content = content.replace(
+                      "</manifest>",
+                      f"    {tag}\n</manifest>",
+                  )
+                  added.append(perm)
+
+          # hardware.location.gps feature (optional, kein Pflichtgerät)
+          gps_feature = '<uses-feature android:name="android.hardware.location.gps" android:required="false" />'
+          if "android.hardware.location.gps" not in content:
+              content = content.replace(
+                  "</manifest>",
+                  f"    {gps_feature}\n</manifest>",
+              )
+              added.append("hardware.location.gps")
+
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(content)
+
+          if added:
+              print("Hinzugefügt:", "\n  ".join([""] + added))
+          else:
+              print("Alle Berechtigungen bereits vorhanden.")
+          EOF
+
       - name: Build Release APK
         working-directory: android
         run: ./gradlew assembleRelease
