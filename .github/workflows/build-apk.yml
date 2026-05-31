@@ -123,7 +123,6 @@ jobs:
             --ks /tmp/keystore.jks \
             --ks-pass "env:KEYSTORE_PASSWORD" \
             --ks-key-alias "$KEY_ALIAS" \
-            --key-pass "env:KEY_PASSWORD" \
             --out android/app/build/outputs/apk/release/app-release-signed.apk \
             android/app/build/outputs/apk/release/app-release-unsigned.apk
           rm -f /tmp/keystore.jks
