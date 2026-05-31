@@ -32,6 +32,7 @@ jobs:
       - name: Capacitor Add & Sync
         run: |
           npx cap add android
+          mkdir -p android/app/src/main/assets
           npx cap sync android
 
       - name: Write google-services.json
