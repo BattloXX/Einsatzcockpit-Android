@@ -118,6 +118,12 @@ jobs:
         run: |
           echo "$KEYSTORE_B64" | base64 --decode > /tmp/keystore.jks
           chmod 600 /tmp/keystore.jks
+          echo "=== Keystore Diagnose ==="
+          ls -la /tmp/keystore.jks
+          keytool -list -keystore /tmp/keystore.jks -storepass "$KEYSTORE_PASSWORD" -v 2>&1 | head -20
+          echo "=== Alias prüfen ==="
+          printf '%s' "$KEY_ALIAS" | xxd | head -3
+          echo "========================"
           APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -name "apksigner" | sort -V | tail -1)
           "$APKSIGNER" sign \
             --ks /tmp/keystore.jks \
