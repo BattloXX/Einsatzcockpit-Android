@@ -29,8 +29,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Capacitor Sync
-        run: npx cap sync android
+      - name: Capacitor Add & Sync
+        run: |
+          npx cap add android
+          npx cap sync android
 
       - name: Write google-services.json
         run: |
