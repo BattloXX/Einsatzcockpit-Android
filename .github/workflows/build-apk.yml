@@ -37,7 +37,23 @@ jobs:
 
       - name: Write google-services.json
         run: |
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+          SECRET='${{ secrets.GOOGLE_SERVICES_JSON }}'
+          if [ -n "$SECRET" ] && echo "$SECRET" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+            echo "$SECRET" > android/app/google-services.json
+          else
+            # Platzhalter: APK baut durch, FCM-Push funktioniert erst nach echtem Secret
+            cat > android/app/google-services.json <<'PLACEHOLDER'
+          {
+            "project_info": { "project_number": "000000000000", "project_id": "placeholder", "storage_bucket": "placeholder.appspot.com" },
+            "client": [{
+              "client_info": { "mobilesdk_app_id": "1:000000000000:android:0000000000000000", "android_client_info": { "package_name": "cloud.einsatzleiter.app" } },
+              "oauth_client": [], "api_key": [{ "current_key": "placeholder" }], "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+            }],
+            "configuration_version": "1"
+          }
+          PLACEHOLDER
+            echo "⚠️  GOOGLE_SERVICES_JSON secret nicht gesetzt – Platzhalter verwendet (FCM inaktiv)"
+          fi
 
       - name: Patch AndroidManifest (Standort-Berechtigungen)
         run: |
