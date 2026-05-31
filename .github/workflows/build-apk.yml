@@ -11,6 +11,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_FILE != '' }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,14 +55,12 @@ jobs:
             "configuration_version": "1"
           }
           PLACEHOLDER
-            echo "⚠️  GOOGLE_SERVICES_JSON secret nicht gesetzt – Platzhalter verwendet (FCM inaktiv)"
+            echo "GOOGLE_SERVICES_JSON secret nicht gesetzt - Platzhalter verwendet (FCM inaktiv)"
           fi
 
       - name: Patch AndroidManifest (Standort-Berechtigungen)
         run: |
           python3 - <<'EOF'
-          import re, sys
-
           path = "android/app/src/main/AndroidManifest.xml"
           with open(path, encoding="utf-8") as f:
               content = f.read()
@@ -76,53 +77,50 @@ jobs:
           for perm in PERMISSIONS:
               tag = f'<uses-permission android:name="{perm}" />'
               if perm not in content:
-                  content = content.replace(
-                      "</manifest>",
-                      f"    {tag}\n</manifest>",
-                  )
+                  content = content.replace("</manifest>", f"    {tag}\n</manifest>")
                   added.append(perm)
 
-          # hardware.location.gps feature (optional, kein Pflichtgerät)
           gps_feature = '<uses-feature android:name="android.hardware.location.gps" android:required="false" />'
           if "android.hardware.location.gps" not in content:
-              content = content.replace(
-                  "</manifest>",
-                  f"    {gps_feature}\n</manifest>",
-              )
+              content = content.replace("</manifest>", f"    {gps_feature}\n</manifest>")
               added.append("hardware.location.gps")
 
           with open(path, "w", encoding="utf-8") as f:
               f.write(content)
 
-          if added:
-              print("Hinzugefügt:", "\n  ".join([""] + added))
-          else:
-              print("Alle Berechtigungen bereits vorhanden.")
+          print("Hinzugefuegt:" if added else "Alle Berechtigungen vorhanden.", added)
           EOF
 
       - name: Build APK
         working-directory: android
         run: |
-          if [ -n "${{ secrets.KEYSTORE_FILE }}" ]; then
-            echo "Release-Build mit Signierung"
+          if [ "$HAS_KEYSTORE" = "true" ]; then
+            echo "Release-Build"
             ./gradlew assembleRelease
           else
-            echo "⚠️  Kein Keystore-Secret – Debug-APK wird gebaut (sideloadbar)"
+            echo "Kein Keystore-Secret - Debug-APK (sideloadbar)"
             ./gradlew assembleDebug
           fi
 
-      - name: Sign Release APK (nur wenn Keystore vorhanden)
-        if: ${{ secrets.KEYSTORE_FILE != '' }}
+      - name: Sign Release APK
+        if: ${{ env.HAS_KEYSTORE == 'true' }}
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_FILE }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "${{ secrets.KEYSTORE_FILE }}" | base64 --decode > /tmp/keystore.jks
-          APKSIGNER=$(find $ANDROID_SDK_ROOT/build-tools -name "apksigner" | sort -V | tail -1)
+          echo "$KEYSTORE_B64" | base64 --decode > /tmp/keystore.jks
+          chmod 600 /tmp/keystore.jks
+          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -name "apksigner" | sort -V | tail -1)
           "$APKSIGNER" sign \
             --ks /tmp/keystore.jks \
-            --ks-pass "pass:${{ secrets.KEYSTORE_PASSWORD }}" \
-            --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
-            --key-pass "pass:${{ secrets.KEY_PASSWORD }}" \
+            --ks-pass "pass:env:KEYSTORE_PASSWORD" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass "pass:env:KEY_PASSWORD" \
             --out android/app/build/outputs/apk/release/app-release-signed.apk \
             android/app/build/outputs/apk/release/app-release-unsigned.apk
+          rm -f /tmp/keystore.jks
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -133,13 +131,11 @@ jobs:
             android/app/build/outputs/apk/release/app-release-unsigned.apk
             android/app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Create GitHub Release (auf Tags)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Create GitHub Release (nur auf Tags mit Keystore)
+        if: ${{ startsWith(github.ref, 'refs/tags/') && env.HAS_KEYSTORE == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            android/app/build/outputs/apk/release/app-release-signed.apk
-            android/app/build/outputs/apk/debug/app-debug.apk
+          files: android/app/build/outputs/apk/release/app-release-signed.apk
           name: einsatzleiter.cloud ${{ github.ref_name }}
           body: |
             ## Installation
