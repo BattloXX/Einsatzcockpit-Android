@@ -56,33 +56,88 @@ npx cap open android
 
 ## 6. Release-APK erstellen
 
+### Keystore erstellen (einmalig)
+
+**Wichtig:** Keytool direkt über die Kommandozeile aufrufen, **nicht** über den Android Studio-Dialog. Android Studio erstellt PKCS12-Dateien mit veralteten Algorithmen (PBEWithSHA1AndDESede), die mit Java 17+ im CI inkompatibel sind.
+
+```bash
+# Windows (cmd.exe):
+"C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe" -genkeypair -v ^
+  -keystore einsatzleiter.keystore -alias einsatzleiter ^
+  -keyalg RSA -keysize 2048 -sigalg SHA256withRSA -validity 9999 ^
+  -storetype PKCS12 ^
+  -dname "CN=Name, OU=Org, O=Org, L=Stadt, ST=Bundesland, C=AT"
+
+# Linux/macOS:
+keytool -genkeypair -v \
+  -keystore einsatzleiter.keystore -alias einsatzleiter \
+  -keyalg RSA -keysize 2048 -sigalg SHA256withRSA -validity 9999 \
+  -storetype PKCS12 \
+  -dname "CN=Name, OU=Org, O=Org, L=Stadt, ST=Bundesland, C=AT"
+```
+
+Den Keystore **nicht** ins Repo committen.
+
+### Lokale APK bauen
+
 ```bash
 cd android
 ./gradlew assembleRelease
 ```
 
-APK liegt dann unter `android/app/build/outputs/apk/release/`.
-
-### Keystore erstellen (einmalig)
-
-```bash
-keytool -genkey -v -keystore einsatzleiter.keystore \
-  -keyalg RSA -keysize 2048 -validity 10000 \
-  -alias einsatzleiter
-```
-
-Keystore **nicht** ins Repo! Als GitHub-Secret `KEYSTORE_FILE` (Base64) hinterlegen.
+APK liegt unter `android/app/build/outputs/apk/release/`.
 
 ## 7. CI/CD (GitHub Actions)
 
-Folgende Secrets in GitHub hinterlegen:
-- `GOOGLE_SERVICES_JSON` – Inhalt der google-services.json
-- `KEYSTORE_FILE` – Base64-kodierter Keystore: `base64 einsatzleiter.keystore`
-- `KEYSTORE_PASSWORD` – Keystore-Passwort
-- `KEY_ALIAS` – Key-Alias (z.B. `einsatzleiter`)
-- `KEY_PASSWORD` – Key-Passwort
+Bei jedem Push auf `main` oder einem Tag `v*` baut der Workflow automatisch eine signierte Release-APK und erstellt einen GitHub Release (nur bei Tags mit gesetztem Keystore-Secret).
 
-Bei jedem Push auf `main` oder Tag `v*` wird automatisch eine signierte APK gebaut.
+### Secrets hinterlegen
+
+Alle Secrets über die GitHub CLI setzen (nicht über Copy-Paste im Browser, um Encoding-Probleme zu vermeiden):
+
+**Keystore als Base64:**
+
+```powershell
+# Windows PowerShell:
+[Convert]::ToBase64String([System.IO.File]::ReadAllBytes("einsatzleiter.keystore")) `
+  | Set-Content -Encoding ascii -NoNewline "$env:TEMP\ks_b64.txt"
+Get-Content -Raw "$env:TEMP\ks_b64.txt" `
+  | gh secret set KEYSTORE_FILE --repo OWNER/REPO
+Remove-Item "$env:TEMP\ks_b64.txt"
+```
+
+```bash
+# Linux/macOS:
+base64 -w0 einsatzleiter.keystore | gh secret set KEYSTORE_FILE --repo OWNER/REPO
+```
+
+**Weitere Secrets** (jeweils interaktiv eingeben — Wert wird nicht in der Shell-History gespeichert):
+
+```bash
+gh secret set KEYSTORE_PASSWORD --repo OWNER/REPO   # Keystore-Passwort
+gh secret set KEY_ALIAS --repo OWNER/REPO           # z.B. einsatzleiter (ohne Leerzeichen/Newline!)
+gh secret set KEY_PASSWORD --repo OWNER/REPO        # Key-Passwort (oft = Keystore-Passwort)
+gh secret set GOOGLE_SERVICES_JSON --repo OWNER/REPO
+```
+
+> **Hinweis zu KEY_ALIAS:** Nie mit `echo "alias" | gh secret set ...` setzen — echo fügt ein Newline an, das als Teil des Alias gespeichert wird. Stattdessen `printf "alias" | gh secret set ...` verwenden oder interaktiv eingeben.
+
+### Wie das Signing im CI funktioniert
+
+Der Workflow in `.github/workflows/build-apk.yml` führt folgende Schritte durch:
+
+1. **Build:** `./gradlew assembleRelease` erstellt eine unsignierte APK
+2. **Konvertierung:** `openssl pkcs12` re-packaged den hochgeladenen Keystore in ein Java 21-kompatibles Format (der originale Keystore verwendet möglicherweise ältere PKCS12-Algorithmen, die `apksigner` unter Java 17+ nicht lesen kann)
+3. **Signierung:** `apksigner sign` signiert die APK mit dem konvertierten Keystore
+4. **Upload:** Artifact + GitHub Release werden erstellt
+
+```
+KEYSTORE_FILE (Base64)
+  └─ base64 --decode → /tmp/ks-orig.p12
+       └─ openssl pkcs12 (re-pack) → /tmp/keystore.jks  (AES-256, Java 21-kompatibel)
+            └─ apksigner sign → app-release-signed.apk
+                 └─ GitHub Release v*
+```
 
 ## Erster Start auf dem Gerät
 
