@@ -116,8 +116,26 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "$KEYSTORE_B64" | base64 --decode > /tmp/keystore.jks
+          echo "$KEYSTORE_B64" | base64 --decode > /tmp/ks-orig.p12
+          chmod 600 /tmp/ks-orig.p12
+          # openssl re-packaged PKCS12 mit modernen Algorithmen (Java 21-kompatibel)
+          openssl pkcs12 -in /tmp/ks-orig.p12 -nocerts -nodes \
+            -passin env:KEYSTORE_PASSWORD -out /tmp/key.pem \
+            -provider default -provider legacy 2>/dev/null || \
+          openssl pkcs12 -in /tmp/ks-orig.p12 -nocerts -nodes \
+            -passin env:KEYSTORE_PASSWORD -out /tmp/key.pem
+          openssl pkcs12 -in /tmp/ks-orig.p12 -nokeys \
+            -passin env:KEYSTORE_PASSWORD -out /tmp/cert.pem \
+            -provider default -provider legacy 2>/dev/null || \
+          openssl pkcs12 -in /tmp/ks-orig.p12 -nokeys \
+            -passin env:KEYSTORE_PASSWORD -out /tmp/cert.pem
+          openssl pkcs12 -export \
+            -in /tmp/cert.pem -inkey /tmp/key.pem \
+            -name "$KEY_ALIAS" \
+            -out /tmp/keystore.jks \
+            -passout env:KEYSTORE_PASSWORD
           chmod 600 /tmp/keystore.jks
+          rm -f /tmp/ks-orig.p12 /tmp/key.pem /tmp/cert.pem
           APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -name "apksigner" | sort -V | tail -1)
           "$APKSIGNER" sign \
             --ks /tmp/keystore.jks \
