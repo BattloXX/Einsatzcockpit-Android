@@ -18,7 +18,34 @@ import { Preferences } from '@capacitor/preferences';
 
 // ── Dauerhafter Login ────────────────────────────────────────────────────────
 // Token-Schlüssel in Secure Preferences
-const DEVICE_TOKEN_KEY = 'el_device_token';
+const DEVICE_TOKEN_KEY  = 'el_device_token';
+const GATEWAY_URL_KEY   = 'el_gateway_url';
+const GATEWAY_TOKEN_KEY = 'el_gateway_token';
+
+// ── Gateway-Konfig-Helfer ────────────────────────────────────────────────────
+
+/**
+ * Speichert URL + Token für den SMS-Gateway-Modus.
+ * Wird nach erfolgreichem QR-Scan mit mode=sms-gateway aufgerufen.
+ */
+export async function saveGatewayConfig(url: string, token: string): Promise<void> {
+  await Preferences.set({ key: GATEWAY_URL_KEY,   value: url.trimEnd('/') });
+  await Preferences.set({ key: GATEWAY_TOKEN_KEY, value: token });
+}
+
+/** Gibt gespeicherte Gateway-Konfig zurück, oder null wenn nicht vorhanden. */
+export async function getGatewayConfig(): Promise<{ url: string; token: string } | null> {
+  const { value: url }   = await Preferences.get({ key: GATEWAY_URL_KEY });
+  const { value: token } = await Preferences.get({ key: GATEWAY_TOKEN_KEY });
+  if (url && token) return { url, token };
+  return null;
+}
+
+/** Löscht die Gateway-Konfiguration (beim Abmelden / Neu-konfigurieren). */
+export async function clearGatewayConfig(): Promise<void> {
+  await Preferences.remove({ key: GATEWAY_URL_KEY });
+  await Preferences.remove({ key: GATEWAY_TOKEN_KEY });
+}
 
 /**
  * Transparentes Re-Login: Beim App-Start gespeicherten Device-Token verwenden

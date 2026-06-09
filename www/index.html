@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>einsatzleiter.cloud</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a; --surface: #1e293b; --border: #334155;
+      --text: #f1f5f9; --muted: #94a3b8; --blue: #3b82f6; --red: #ef4444;
+    }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100dvh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 32px 24px; gap: 24px; text-align: center;
+    }
+    .logo { font-size: 3rem; }
+    h1 { font-size: 1.4rem; font-weight: 700; }
+    .sub { font-size: .9rem; color: var(--muted); }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px 24px; width: 100%; max-width: 360px;
+    }
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+    .card p { font-size: .85rem; color: var(--muted); line-height: 1.5; }
+    button {
+      width: 100%; border: none; border-radius: 10px; cursor: pointer;
+      font-size: .95rem; font-weight: 600; padding: 14px;
+      background: var(--blue); color: #fff; margin-top: 16px;
+      transition: opacity .15s;
+    }
+    button:active { opacity: .75; }
+    button:disabled { opacity: .45; cursor: default; }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid var(--border);
+      border-top-color: var(--blue); border-radius: 50%;
+      animation: spin .7s linear infinite; margin: 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #error { color: var(--red); font-size: .85rem; display: none; }
+  </style>
+</head>
+<body>
+  <div class="logo">🚒</div>
+  <div>
+    <h1>einsatzleiter.cloud</h1>
+    <div class="sub" id="statusLine">Startet…</div>
+  </div>
+  <div class="spinner" id="spinner"></div>
+
+  <!-- Erster Start / kein Token -->
+  <div class="card" id="setupCard" style="display:none;">
+    <h2>🔲 QR-Code scannen</h2>
+    <p>Scanne den QR-Code aus dem Admin-Bereich<br>(Admin → Geräte-Login → + Gerät registrieren)</p>
+    <button onclick="startScan()">QR-Code scannen</button>
+  </div>
+
+  <div id="error"></div>
+
+<script>
+// ── Start-Logik ────────────────────────────────────────────────────────────────
+// Wartet auf Capacitor-Bridge (asynchron injiziert)
+function waitForCapacitor(cb, timeout = 3000) {
+  const start = Date.now();
+  function check() {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
+      cb();
+    } else if (Date.now() - start < timeout) {
+      setTimeout(check, 100);
+    } else {
+      // Kein Capacitor – direkt zur PWA (Browser-Fallback)
+      window.location.href = 'https://einsatzleiter.cloud';
+    }
+  }
+  check();
+}
+
+waitForCapacitor(async () => {
+  const { Preferences, SmsGateway } = window.Capacitor.Plugins;
+
+  // 1. Gateway-Modus prüfen
+  const { value: gwUrl }   = await Preferences.get({ key: 'el_gateway_url' });
+  const { value: gwToken } = await Preferences.get({ key: 'el_gateway_token' });
+  if (gwUrl && gwToken) {
+    setStatus('SMS-Gateway startet…');
+    if (SmsGateway) {
+      await SmsGateway.startGateway({ url: gwUrl, token: gwToken });
+    }
+    window.location.replace('gateway.html');
+    return;
+  }
+
+  // 2. Einheit-Gerät: gespeicherten Device-Token prüfen
+  const { value: deviceToken } = await Preferences.get({ key: 'el_device_token' });
+  if (deviceToken) {
+    setStatus('Anmelden…');
+    window.location.replace(
+      'https://einsatzleiter.cloud/geraet-login?token=' + encodeURIComponent(deviceToken));
+    return;
+  }
+
+  // 3. Kein Token → QR-Scanner anzeigen
+  setStatus('QR-Code benötigt');
+  document.getElementById('spinner').style.display = 'none';
+  document.getElementById('setupCard').style.display = '';
+});
+
+function setStatus(msg) {
+  document.getElementById('statusLine').textContent = msg;
+}
+
+// ── QR-Scan ────────────────────────────────────────────────────────────────────
+async function startScan() {
+  const { Preferences, SmsGateway } = window.Capacitor.Plugins;
+  const BarcodeScanner = window.Capacitor.Plugins.BarcodeScanner;
+
+  if (!BarcodeScanner) {
+    showError('QR-Scanner-Plugin nicht verfügbar.');
+    return;
+  }
+
+  setStatus('QR-Scanner öffnet…');
+  document.getElementById('setupCard').querySelector('button').disabled = true;
+
+  try {
+    // Google Barcode Scanner Module prüfen/installieren
+    const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
+    if (!available) {
+      setStatus('Google-Scanner-Modul wird installiert…');
+      await new Promise((resolve, reject) => {
+        BarcodeScanner.addListener('googleBarcodeScannerModuleInstallProgress', (e) => {
+          if (e.state === 4) resolve();
+          else if (e.state === 5) reject(new Error('Modul-Installation fehlgeschlagen'));
+        });
+        BarcodeScanner.installGoogleBarcodeScannerModule();
+      });
+    }
+
+    setStatus('QR-Code scannen…');
+    const { barcodes } = await BarcodeScanner.scan();
+    if (!barcodes || barcodes.length === 0) {
+      showError('Kein QR-Code gescannt.');
+      return;
+    }
+    await handleQrResult(barcodes[0].rawValue, Preferences, SmsGateway);
+  } catch (e) {
+    showError('Scan-Fehler: ' + (e.message || e));
+    document.getElementById('setupCard').querySelector('button').disabled = false;
+  }
+}
+
+async function handleQrResult(raw, Preferences, SmsGateway) {
+  let parsed;
+  try { parsed = new URL(raw); }
+  catch (_) { showError('Ungültiger QR-Code.'); return; }
+
+  const token = parsed.searchParams.get('token');
+  const mode  = parsed.searchParams.get('mode');
+
+  if (!token) { showError('QR-Code enthält kein Token.'); return; }
+
+  if (mode === 'sms-gateway') {
+    // ── Gateway-Modus ──────────────────────────────────────────────────────
+    const baseUrl = parsed.origin;
+    setStatus('SMS-Gateway konfigurieren…');
+
+    await Preferences.set({ key: 'el_gateway_url',   value: baseUrl });
+    await Preferences.set({ key: 'el_gateway_token', value: token });
+
+    if (SmsGateway) {
+      // Berechtigung anfragen
+      const { granted } = await SmsGateway.requestPermission();
+      if (!granted) {
+        showError('SMS-Berechtigung verweigert – bitte manuell in den App-Einstellungen aktivieren.');
+        // Trotzdem fortfahren; Service startet, aber SMS schlägt fehl bis berechtigt
+      }
+      await SmsGateway.startGateway({ url: baseUrl, token });
+    }
+    window.location.replace('gateway.html');
+
+  } else {
+    // ── Einheit-Gerät-Modus ────────────────────────────────────────────────
+    setStatus('Anmelden…');
+    await Preferences.set({ key: 'el_device_token', value: token });
+    window.location.replace(raw);  // geraet-login?token=… beim Server
+  }
+}
+
+function showError(msg) {
+  setStatus('Fehler');
+  const el = document.getElementById('error');
+  el.textContent = msg;
+  el.style.display = '';
+  document.getElementById('setupCard').querySelector('button').disabled = false;
+}
+</script>
+</body>
+</html>

@@ -32,7 +32,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Capacitor Add & Sync
         run: |
@@ -66,7 +66,7 @@ jobs:
             echo "GOOGLE_SERVICES_JSON secret nicht gesetzt - Platzhalter verwendet (FCM inaktiv)"
           fi
 
-      - name: Patch AndroidManifest (Standort-Berechtigungen)
+      - name: Patch AndroidManifest (Standort + SMS-Gateway-Berechtigungen)
         run: |
           python3 - <<'EOF'
           path = "android/app/src/main/AndroidManifest.xml"
@@ -74,11 +74,17 @@ jobs:
               content = f.read()
 
           PERMISSIONS = [
+              # GPS / Standort
               "android.permission.ACCESS_COARSE_LOCATION",
               "android.permission.ACCESS_FINE_LOCATION",
               "android.permission.ACCESS_BACKGROUND_LOCATION",
               "android.permission.FOREGROUND_SERVICE",
               "android.permission.FOREGROUND_SERVICE_LOCATION",
+              # SMS-Gateway (meistens schon via Plugin-Manifest eingebracht)
+              "android.permission.SEND_SMS",
+              "android.permission.RECEIVE_BOOT_COMPLETED",
+              "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+              "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
           ]
 
           added = []
@@ -167,4 +173,5 @@ jobs:
             1. APK-Datei auf das Android-Gerät übertragen
             2. Einstellungen → Sicherheit → "Unbekannte Quellen" erlauben
             3. APK installieren
-            4. App starten → QR-Code aus dem Admin-Bereich scannen (Admin → Geräte-Login)
+            4. App starten → QR-Code aus dem Admin-Bereich scannen
+               (Admin → Geräte-Login → Einheit-Gerät oder SMS-Gateway registrieren)
