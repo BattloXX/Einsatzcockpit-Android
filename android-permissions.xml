@@ -23,3 +23,9 @@
 
 <!-- Vibration für Benachrichtigungen -->
 <uses-permission android:name="android.permission.VIBRATE" />
+
+<!-- SMS-Gateway (vom Plugin-Manifest eingebracht, hier zur Dokumentation) -->
+<uses-permission android:name="android.permission.SEND_SMS" />
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" /> <!-- Android 14+ -->
+<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />

@@ -3,10 +3,12 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'cloud.einsatzleiter.app',
   appName: 'einsatzleiter.cloud',
-  // Remote-Modus: App lädt die produktive PWA direkt vom Server.
-  // Kein lokales Bundle nötig – Updates kommen automatisch über den Server.
+  // www/index.html dient als Launcher: entscheidet beim Start ob Gateway-Modus
+  // oder Einheit-Gerät-Modus (Weiterleitung zur Remote-PWA).
+  webDir: 'www',
   server: {
-    url: 'https://einsatzleiter.cloud',
+    // Kein server.url – App startet immer von index.html (lokal).
+    // allowNavigation erlaubt WebView-Navigation zur Remote-PWA ohne externen Browser.
     cleartext: false,
     allowNavigation: [
       'einsatzleiter.cloud',

@@ -1,0 +1,14 @@
+{
+  "name": "@einsatzleiter/sms-gateway-plugin",
+  "version": "1.0.0",
+  "description": "Capacitor-Plugin: WebSocket SMS-Gateway über SIM-Karte (Foreground-Service)",
+  "main": "android/build.gradle",
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=7.0.0"
+  }
+}

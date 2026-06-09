@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>SMS-Gateway</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --border:   #334155;
+      --text:     #f1f5f9;
+      --muted:    #94a3b8;
+      --green:    #22c55e;
+      --red:      #ef4444;
+      --yellow:   #f59e0b;
+      --blue:     #3b82f6;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 15px;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 14px;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-icon { font-size: 1.8rem; }
+    .header-title { font-size: 1.2rem; font-weight: 700; }
+    .header-sub { font-size: .8rem; color: var(--muted); margin-top: 1px; }
+
+    /* ── Karten ──────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .card-label {
+      font-size: .75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    /* ── Status-Badge ────────────────────────────────────────────────────── */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .dot {
+      width: 11px; height: 11px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--muted);
+    }
+    .dot.connected    { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.disconnected { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+    .dot.connecting   { background: var(--yellow);animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+
+    .status-text { font-weight: 600; font-size: 1rem; }
+    .status-count { margin-left: auto; font-size: .82rem; color: var(--muted); }
+
+    .url-row {
+      margin-top: 10px;
+      font-size: .82rem;
+      color: var(--muted);
+      overflow-wrap: break-word;
+    }
+    .url-row span { color: var(--text); font-family: monospace; }
+
+    .error-row {
+      margin-top: 8px;
+      font-size: .8rem;
+      color: var(--red);
+      display: none;
+    }
+
+    /* ── SMS-Log ─────────────────────────────────────────────────────────── */
+    #smsLog { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    #smsLog li {
+      font-size: .83rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #smsLog .log-time { color: var(--muted); flex-shrink: 0; font-family: monospace; }
+    #smsLog .log-num  { color: var(--text); }
+    #smsLog .log-ok   { color: var(--green); margin-left: auto; }
+    .log-empty { font-size: .85rem; color: var(--muted); text-align: center; padding: 8px 0; }
+
+    /* ── Test-SMS ────────────────────────────────────────────────────────── */
+    .input-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    input[type="tel"] {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: .9rem;
+      padding: 9px 12px;
+      outline: none;
+    }
+    input[type="tel"]:focus { border-color: var(--blue); }
+    input[type="tel"]::placeholder { color: var(--muted); }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: .88rem;
+      font-weight: 600;
+      padding: 9px 16px;
+      transition: opacity .15s;
+    }
+    button:disabled { opacity: .45; cursor: default; }
+    button:active:not(:disabled) { opacity: .75; }
+
+    .btn-primary  { background: var(--blue); color: #fff; }
+    .btn-ghost    { background: var(--border); color: var(--text); }
+    .btn-danger   { background: #7f1d1d; color: #fca5a5; }
+
+    /* ── Aktionen ────────────────────────────────────────────────────────── */
+    .action-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .action-row button { flex: 1; min-width: 120px; }
+
+    /* ── Toast ───────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 8px 20px;
+      font-size: .85rem;
+      transition: transform .25s ease;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-icon">📡</div>
+    <div>
+      <div class="header-title">SMS-Gateway</div>
+      <div class="header-sub" id="headerSub">einsatzleiter.cloud</div>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="card">
+    <div class="card-label">Verbindungsstatus</div>
+    <div class="status-row">
+      <div class="dot connecting" id="statusDot"></div>
+      <div class="status-text" id="statusText">Verbinde…</div>
+      <div class="status-count" id="sentCount"></div>
+    </div>
+    <div class="url-row">Server: <span id="urlDisplay">–</span></div>
+    <div class="url-row">Token: <span id="tokenDisplay">–</span></div>
+    <div class="error-row" id="errorRow"></div>
+  </div>
+
+  <!-- SMS-Log -->
+  <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+    <div class="card-label">Letzte SMS-Aufträge</div>
+    <ul id="smsLog" style="overflow-y:auto;flex:1;">
+      <li><div class="log-empty">Noch keine SMS versendet.</div></li>
+    </ul>
+  </div>
+
+  <!-- Test-SMS -->
+  <div class="card">
+    <div class="card-label">Test-SMS</div>
+    <div class="input-row">
+      <input type="tel" id="testTo" placeholder="+43664…" autocomplete="off">
+      <button class="btn-primary" id="btnSend" onclick="sendTestSms()">Senden</button>
+    </div>
+  </div>
+
+  <!-- Aktionen -->
+  <div class="action-row">
+    <button class="btn-ghost" onclick="rescan()">🔲 Neu konfigurieren (QR)</button>
+    <button class="btn-danger" onclick="disconnect()">⏹ Trennen &amp; zurück</button>
+  </div>
+
+  <div id="toast"></div>
+
+<script>
+// ── Capacitor-Bridge ──────────────────────────────────────────────────────────
+// Warten bis Capacitor bereit ist (Bridge wird asynchron injiziert)
+function waitForCapacitor(cb) {
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SmsGateway) {
+    cb();
+  } else {
+    document.addEventListener('deviceready', cb, { once: true });
+    setTimeout(() => {
+      if (window.Capacitor) cb();
+    }, 500);
+  }
+}
+
+let Preferences, SmsGateway;
+let gwUrl = '', gwTokenMasked = '';
+const LOG_MAX = 50;
+const log = [];
+
+waitForCapacitor(async () => {
+  Preferences  = window.Capacitor.Plugins.Preferences;
+  SmsGateway   = window.Capacitor.Plugins.SmsGateway;
+
+  // Konfig laden
+  const { value: url }   = await Preferences.get({ key: 'el_gateway_url' });
+  const { value: token } = await Preferences.get({ key: 'el_gateway_token' });
+
+  if (!url || !token) {
+    setStatus('disconnected', 'Keine Konfiguration');
+    return;
+  }
+
+  gwUrl = url;
+  gwTokenMasked = 'smsgw_•••' + token.slice(-4);
+
+  document.getElementById('urlDisplay').textContent   = new URL(url).hostname;
+  document.getElementById('tokenDisplay').textContent = gwTokenMasked;
+  document.getElementById('headerSub').textContent    = new URL(url).hostname;
+
+  // Plugin-Events abonnieren
+  await SmsGateway.addListener('statusChanged', onStatusChanged);
+  await SmsGateway.addListener('smsSent', onSmsSent);
+
+  // Aktuellen Status abrufen
+  const status = await SmsGateway.getStatus();
+  onStatusChanged(status);
+
+  // Service starten (falls noch nicht laufend)
+  await SmsGateway.startGateway({ url, token });
+});
+
+// ── Status-Handler ────────────────────────────────────────────────────────────
+function onStatusChanged(data) {
+  const { connected, lastError, sentCount } = data;
+  if (connected) {
+    setStatus('connected', 'Verbunden');
+  } else if (lastError) {
+    setStatus('disconnected', 'Getrennt');
+    const row = document.getElementById('errorRow');
+    row.textContent = lastError;
+    row.style.display = '';
+  } else {
+    setStatus('connecting', 'Verbinde…');
+    document.getElementById('errorRow').style.display = 'none';
+  }
+  if (sentCount != null) {
+    document.getElementById('sentCount').textContent =
+      sentCount > 0 ? sentCount + ' SMS gesendet' : '';
+  }
+}
+
+function onSmsSent(data) {
+  const { to, at } = data;
+  const time = new Date(at).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
+  log.unshift({ to, time });
+  if (log.length > LOG_MAX) log.pop();
+  renderLog();
+}
+
+function renderLog() {
+  const ul = document.getElementById('smsLog');
+  if (log.length === 0) {
+    ul.innerHTML = '<li><div class="log-empty">Noch keine SMS versendet.</div></li>';
+    return;
+  }
+  ul.innerHTML = log.map(e =>
+    `<li>
+      <span class="log-time">${e.time}</span>
+      <span class="log-num">→ ${e.to}</span>
+      <span class="log-ok">✓</span>
+    </li>`
+  ).join('');
+}
+
+// ── Status-Anzeige ────────────────────────────────────────────────────────────
+function setStatus(state, text) {
+  const dot  = document.getElementById('statusDot');
+  const txt  = document.getElementById('statusText');
+  dot.className = 'dot ' + state;
+  txt.textContent = text;
+  if (state === 'connected') {
+    document.getElementById('errorRow').style.display = 'none';
+  }
+}
+
+// ── Test-SMS senden ───────────────────────────────────────────────────────────
+async function sendTestSms() {
+  const to = document.getElementById('testTo').value.trim();
+  if (!to) { toast('Bitte Nummer eingeben'); return; }
+  if (!SmsGateway) { toast('Plugin nicht bereit'); return; }
+
+  const btn = document.getElementById('btnSend');
+  btn.disabled = true;
+  btn.textContent = '…';
+
+  try {
+    await SmsGateway.sendTestSms({ to, text: 'Test-SMS von einsatzleiter.cloud' });
+    toast('✓ Test-SMS gesendet');
+    const time = new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
+    log.unshift({ to: to.slice(-7).padStart(to.length, '•'), time });
+    if (log.length > LOG_MAX) log.pop();
+    renderLog();
+  } catch (e) {
+    toast('Fehler: ' + (e.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Senden';
+  }
+}
+
+// ── Aktionen ──────────────────────────────────────────────────────────────────
+async function rescan() {
+  if (!confirm('Gateway-Konfiguration löschen und neu konfigurieren?')) return;
+  if (SmsGateway) await SmsGateway.stopGateway();
+  if (Preferences) {
+    await Preferences.remove({ key: 'el_gateway_url' });
+    await Preferences.remove({ key: 'el_gateway_token' });
+  }
+  window.location.href = 'index.html';
+}
+
+async function disconnect() {
+  if (!confirm('Gateway trennen und Modus zurücksetzen?')) return;
+  if (SmsGateway) await SmsGateway.stopGateway();
+  if (Preferences) {
+    await Preferences.remove({ key: 'el_gateway_url' });
+    await Preferences.remove({ key: 'el_gateway_token' });
+  }
+  window.location.href = 'index.html';
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, ms = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), ms);
+}
+</script>
+</body>
+</html>
