@@ -153,10 +153,17 @@ async function startScan() {
   }
 }
 
+const ALLOWED_HOST = 'einsatzleiter.cloud';
+
 async function handleQrResult(raw, Preferences, SmsGateway) {
   let parsed;
   try { parsed = new URL(raw); }
   catch (_) { showError('Ungültiger QR-Code.'); return; }
+
+  if (parsed.hostname !== ALLOWED_HOST) {
+    showError('QR-Code von unbekanntem Server – abgelehnt.');
+    return;
+  }
 
   const token = parsed.searchParams.get('token');
   const mode  = parsed.searchParams.get('mode');
@@ -186,7 +193,8 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
     // ── Einheit-Gerät-Modus ────────────────────────────────────────────────
     setStatus('Anmelden…');
     await Preferences.set({ key: 'el_device_token', value: token });
-    window.location.replace(raw);  // geraet-login?token=… beim Server
+    window.location.replace(
+      `${parsed.origin}/geraet-login?token=${encodeURIComponent(token)}`);
   }
 }
 

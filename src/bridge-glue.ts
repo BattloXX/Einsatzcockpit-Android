@@ -29,7 +29,9 @@ const GATEWAY_TOKEN_KEY = 'el_gateway_token';
  * Wird nach erfolgreichem QR-Scan mit mode=sms-gateway aufgerufen.
  */
 export async function saveGatewayConfig(url: string, token: string): Promise<void> {
-  await Preferences.set({ key: GATEWAY_URL_KEY,   value: url.trimEnd('/') });
+  const parsed = new URL(url);
+  if (parsed.hostname !== 'einsatzleiter.cloud') throw new Error('URL nicht erlaubt');
+  await Preferences.set({ key: GATEWAY_URL_KEY,   value: url.replace(/\/+$/, '') });
   await Preferences.set({ key: GATEWAY_TOKEN_KEY, value: token });
 }
 
