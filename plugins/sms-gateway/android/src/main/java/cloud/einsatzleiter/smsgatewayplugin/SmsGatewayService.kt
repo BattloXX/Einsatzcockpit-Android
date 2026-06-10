@@ -209,7 +209,7 @@ class SmsGatewayService : Service() {
         reconnectHandler.removeCallbacksAndMessages(null)
 
         val wsUri = toWsUrl(wsUrl)
-        log("Verbinde mit $wsUri…")
+        log("Verbinde mit $wsUri?token=…")
         val request = Request.Builder()
             .url("$wsUri?token=$token")
             .header("Authorization", "Bearer $token")
@@ -349,6 +349,7 @@ class SmsGatewayService : Service() {
         .replace("https://", "wss://")
         .replace("http://", "ws://")
         .trimEnd('/')
+        .plus("/ws/sms-gateway")
 
     private fun buildSmsResult(jobId: String, ok: Boolean, error: String?): String =
         if (ok) """{"type":"sms.result","id":"$jobId","ok":true,"provider_response":"OK"}"""
