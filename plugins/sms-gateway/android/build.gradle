@@ -1,13 +1,23 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.25'
+    }
+}
+
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
 android {
     namespace "cloud.einsatzleiter.smsgatewayplugin"
-    compileSdk project(':capacitor-android').android.compileSdkVersion
+    compileSdk 35
 
     defaultConfig {
-        minSdkVersion project(':capacitor-android').android.defaultConfig.minSdkVersion.apiLevel
-        targetSdkVersion project(':capacitor-android').android.defaultConfig.targetSdkVersion.apiLevel
+        minSdk 23
+        targetSdk 35
         versionCode 1
         versionName "1.0"
     }
