@@ -80,11 +80,13 @@ jobs:
               "android.permission.ACCESS_BACKGROUND_LOCATION",
               "android.permission.FOREGROUND_SERVICE",
               "android.permission.FOREGROUND_SERVICE_LOCATION",
-              # SMS-Gateway (meistens schon via Plugin-Manifest eingebracht)
+              # SMS-Gateway
               "android.permission.SEND_SMS",
               "android.permission.RECEIVE_BOOT_COMPLETED",
               "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
               "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+              # Benachrichtigungen für Foreground-Service (Android 13+)
+              "android.permission.POST_NOTIFICATIONS",
           ]
 
           added = []
