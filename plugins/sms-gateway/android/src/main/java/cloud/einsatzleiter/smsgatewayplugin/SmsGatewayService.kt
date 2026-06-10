@@ -63,6 +63,13 @@ class SmsGatewayService : Service() {
             listeners.forEach { it(event, data) }
         }
 
+        internal fun log(msg: String) {
+            emit("logEvent") {
+                put("msg", msg)
+                put("ts", System.currentTimeMillis())
+            }
+        }
+
         // ── Direkter SMS-Versand (Test-Button, ohne WebSocket-Job) ────────────
         fun sendDirectSms(context: Context, to: String, text: String,
                           callback: (ok: Boolean, msg: String) -> Unit) {
@@ -153,6 +160,7 @@ class SmsGatewayService : Service() {
                 token  = intent.getStringExtra(EXTRA_TOKEN) ?: token
                 if (wsUrl.isEmpty() || token.isEmpty()) return START_NOT_STICKY
                 running = true
+                log("Service gestartet")
                 startForeground(NOTIF_ID, buildNotification("Verbinde…"))
                 connect()
             }
@@ -173,6 +181,7 @@ class SmsGatewayService : Service() {
                 // System-Neustart (START_STICKY) – Konfig aus SharedPrefs
                 if (wsUrl.isNotEmpty() && token.isNotEmpty()) {
                     running = true
+                    log("Service neu gestartet (System/Boot)")
                     startForeground(NOTIF_ID, buildNotification("Verbinde (Neustart)…"))
                     connect()
                 } else {
@@ -200,6 +209,7 @@ class SmsGatewayService : Service() {
         reconnectHandler.removeCallbacksAndMessages(null)
 
         val wsUri = toWsUrl(wsUrl)
+        log("Verbinde mit $wsUri…")
         val request = Request.Builder()
             .url("$wsUri?token=$token")
             .header("Authorization", "Bearer $token")
@@ -213,6 +223,7 @@ class SmsGatewayService : Service() {
                 lastError = null
                 // Backoff zurücksetzen
                 reconnectDelay = 1000L
+                log("✓ Verbunden – hello gesendet")
                 webSocket.send("""{"type":"hello","role":"sms-gateway","version":"1.0"}""")
                 updateNotification("Verbunden ✓")
                 emitStatus()
@@ -225,6 +236,7 @@ class SmsGatewayService : Service() {
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 isConnected = false
                 lastError = t.message ?: "Verbindungsfehler"
+                log("✗ Verbindungsfehler: ${lastError?.take(120)}")
                 updateNotification("Getrennt – ${lastError?.take(40)}")
                 emitStatus()
                 // Backoff zurücksetzen wenn Verbindung ≥60 s stabil war
@@ -234,6 +246,7 @@ class SmsGatewayService : Service() {
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 isConnected = false
+                log("WebSocket geschlossen (Code $code: $reason)")
                 emitStatus()
                 if (running) scheduleReconnect()
             }
@@ -244,12 +257,16 @@ class SmsGatewayService : Service() {
         val msg = try { JSONObject(text) } catch (_: Exception) { return }
 
         when (msg.optString("type")) {
-            "ping" -> ws.send("""{"type":"pong"}""")
+            "ping" -> {
+                ws.send("""{"type":"pong"}""")
+                log("← ping → pong")
+            }
             "pong" -> { /* ignorieren */ }
             "sms.send" -> {
                 val jobId = msg.optString("id").ifEmpty { return }
                 val to    = msg.optString("to").ifEmpty { return }
                 val body  = msg.optString("text")
+                log("← SMS-Auftrag #${jobId.take(8)} an $to (${body.length} Zeichen)")
                 sendSmsForJob(ws, jobId, to, body)
             }
         }
@@ -276,6 +293,7 @@ class SmsGatewayService : Service() {
                         ws.send(buildSmsResult(jobId, ok,
                             if (!ok) "SmsManager resultCode=$resultCode" else null))
                         if (ok) {
+                            log("✓ SMS versendet an $to ($partCount Teil(e))")
                             sentCount.incrementAndGet()
                             lastSentTo = to
                             lastSentAt = System.currentTimeMillis()
@@ -284,6 +302,8 @@ class SmsGatewayService : Service() {
                                 put("parts", partCount)
                                 put("at", lastSentAt)
                             }
+                        } else {
+                            log("✗ SMS-Versand fehlgeschlagen: resultCode=$resultCode")
                         }
                         emitStatus()
                     }
@@ -308,6 +328,7 @@ class SmsGatewayService : Service() {
                 smsManager.sendMultipartTextMessage(to, null, parts, intents, null)
             }
         } catch (e: Exception) {
+            log("✗ SMS-Exception: ${e.message?.take(80)}")
             ws.send(buildSmsResult(jobId, false, "Exception: ${e.message}"))
         }
     }
@@ -316,6 +337,7 @@ class SmsGatewayService : Service() {
 
     private fun scheduleReconnect() {
         if (!running) return
+        log("Reconnect in ${reconnectDelay / 1000} s…")
         updateNotification("Reconnect in ${reconnectDelay / 1000}s…")
         reconnectHandler.postDelayed({
             reconnectDelay = minOf(reconnectDelay * 2, 30_000L)

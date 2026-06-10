@@ -105,6 +105,18 @@
     #smsLog .log-ok   { color: var(--green); margin-left: auto; }
     .log-empty { font-size: .85rem; color: var(--muted); text-align: center; padding: 8px 0; }
 
+    /* ── Verbindungslog ──────────────────────────────────────────────────── */
+    .conn-log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .conn-log-actions { display: flex; gap: 6px; }
+    .btn-sm { font-size: .72rem !important; padding: 4px 10px !important; }
+    #connLog {
+      background: #020617; border-radius: 8px; padding: 10px 12px;
+      font-size: .76rem; font-family: monospace; color: #94a3b8;
+      line-height: 1.65; white-space: pre-wrap; word-break: break-all;
+      overflow-y: auto; max-height: 240px; min-height: 60px;
+      user-select: text; -webkit-user-select: text;
+    }
+
     /* ── Test-SMS ────────────────────────────────────────────────────────── */
     .input-row {
       display: flex;
@@ -209,7 +221,18 @@
   <!-- Aktionen -->
   <div class="action-row">
     <button class="btn-ghost" onclick="rescan()">🔲 Neu konfigurieren (QR)</button>
-    <button class="btn-danger" onclick="disconnect()">⏹ Trennen &amp; zurück</button>
+  </div>
+
+  <!-- Verbindungslog -->
+  <div class="card">
+    <div class="conn-log-header">
+      <div class="card-label" style="margin:0">Verbindungslog</div>
+      <div class="conn-log-actions">
+        <button class="btn-ghost btn-sm" onclick="copyLog()">Kopieren</button>
+        <button class="btn-ghost btn-sm" onclick="downloadLog()">↓ Herunterladen</button>
+      </div>
+    </div>
+    <div id="connLog"></div>
   </div>
 
   <div id="toast"></div>
@@ -232,6 +255,34 @@ let Preferences, SmsGateway;
 let gwUrl = '', gwTokenMasked = '';
 const LOG_MAX = 50;
 const log = [];
+
+// ── Verbindungslog ────────────────────────────────────────────────────────────
+const CONN_LOG_MAX = 300;
+const connEntries = [];
+
+function addLog(msg) {
+  const ts = new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  connEntries.push('[' + ts + '] ' + msg);
+  if (connEntries.length > CONN_LOG_MAX) connEntries.shift();
+  const el = document.getElementById('connLog');
+  if (el) { el.textContent = connEntries.join('\n'); el.scrollTop = el.scrollHeight; }
+}
+
+function copyLog() {
+  navigator.clipboard.writeText(connEntries.join('\n'))
+    .then(() => toast('Log kopiert'))
+    .catch(() => toast('Kopieren fehlgeschlagen'));
+}
+
+function downloadLog() {
+  const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+  const blob = new Blob([connEntries.join('\n')], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'gateway-log-' + ts + '.txt';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
 
 waitForCapacitor(async () => {
   Preferences  = window.Capacitor.Plugins.Preferences;
@@ -256,6 +307,9 @@ waitForCapacitor(async () => {
   // Plugin-Events abonnieren
   await SmsGateway.addListener('statusChanged', onStatusChanged);
   await SmsGateway.addListener('smsSent', onSmsSent);
+  await SmsGateway.addListener('logEvent', (e) => addLog(e.msg));
+
+  addLog('Verbinde mit ' + new URL(url).hostname + '…');
 
   // Aktuellen Status abrufen
   const status = await SmsGateway.getStatus();
