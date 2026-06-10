@@ -295,17 +295,27 @@ function onSmsSent(data) {
 
 function renderLog() {
   const ul = document.getElementById('smsLog');
+  ul.innerHTML = '';
   if (log.length === 0) {
-    ul.innerHTML = '<li><div class="log-empty">Noch keine SMS versendet.</div></li>';
+    const li = document.createElement('li');
+    const div = document.createElement('div');
+    div.className = 'log-empty';
+    div.textContent = 'Noch keine SMS versendet.';
+    li.appendChild(div);
+    ul.appendChild(li);
     return;
   }
-  ul.innerHTML = log.map(e =>
-    `<li>
-      <span class="log-time">${e.time}</span>
-      <span class="log-num">→ ${e.to}</span>
-      <span class="log-ok">✓</span>
-    </li>`
-  ).join('');
+  for (const e of log) {
+    const li   = document.createElement('li');
+    const time = document.createElement('span');
+    const num  = document.createElement('span');
+    const ok   = document.createElement('span');
+    time.className = 'log-time'; time.textContent = e.time;
+    num.className  = 'log-num';  num.textContent  = '→ ' + e.to;
+    ok.className   = 'log-ok';   ok.textContent   = '✓';
+    li.appendChild(time); li.appendChild(num); li.appendChild(ok);
+    ul.appendChild(li);
+  }
 }
 
 // ── Status-Anzeige ────────────────────────────────────────────────────────────

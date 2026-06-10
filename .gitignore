@@ -1,5 +1,5 @@
 node_modules/
-android/
+/android/
 *.keystore
 !debug.keystore
 google-services.json

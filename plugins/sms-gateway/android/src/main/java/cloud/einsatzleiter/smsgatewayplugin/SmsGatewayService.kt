@@ -1,0 +1,377 @@
+package cloud.einsatzleiter.smsgatewayplugin
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.telephony.SmsManager
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import com.getcapacitor.JSObject
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import org.json.JSONObject
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * Foreground-Service: Hält eine persistente WebSocket-Verbindung zur Main App
+ * und versendet SMS-Aufträge (sms.send) über die eingebaute SIM-Karte.
+ *
+ * Protokoll: identisch mit Einsatzleiter-SMS-Gateway (PROTOCOL.md)
+ *   - hello → ping/pong → sms.send → SmsManager → sms.result
+ */
+class SmsGatewayService : Service() {
+
+    companion object {
+        const val ACTION_START = "cloud.einsatzleiter.smsgatewayplugin.START"
+        const val ACTION_STOP  = "cloud.einsatzleiter.smsgatewayplugin.STOP"
+        const val EXTRA_URL    = "url"
+        const val EXTRA_TOKEN  = "token"
+
+        private const val NOTIF_CHANNEL_ID = "el_sms_gateway"
+        private const val NOTIF_ID         = 7301
+
+        // ── Zustand (von Plugin abgelesen) ────────────────────────────────────
+        @Volatile var isConnected = false
+        @Volatile var lastError: String? = null
+        val sentCount = AtomicInteger(0)
+        @Volatile var lastSentTo: String? = null
+        @Volatile var lastSentAt: Long = 0
+
+        // ── Plugin-Event-Listener ─────────────────────────────────────────────
+        private val listeners = CopyOnWriteArrayList<(event: String, data: JSObject) -> Unit>()
+
+        fun addPluginListener(l: (String, JSObject) -> Unit) { listeners.add(l) }
+        fun removePluginListener(l: (String, JSObject) -> Unit) { listeners.remove(l) }
+
+        internal fun emit(event: String, build: JSObject.() -> Unit = {}) {
+            val data = JSObject().apply(build)
+            listeners.forEach { it(event, data) }
+        }
+
+        // ── Direkter SMS-Versand (Test-Button, ohne WebSocket-Job) ────────────
+        fun sendDirectSms(context: Context, to: String, text: String,
+                          callback: (ok: Boolean, msg: String) -> Unit) {
+            try {
+                val smsManager = getSmsManager(context)
+                val parts = smsManager.divideMessage(text) ?: arrayListOf(text)
+                val action = "cloud.einsatzleiter.smsgatewayplugin.TEST_SMS_SENT"
+                val partCount = parts.size
+                val sentParts = AtomicInteger(0)
+                val failed = AtomicInteger(0)
+                val counter = requestCounter
+
+                val receiver = object : BroadcastReceiver() {
+                    override fun onReceive(ctx: Context, intent: Intent) {
+                        val done = sentParts.incrementAndGet()
+                        if (resultCode != android.app.Activity.RESULT_OK) failed.incrementAndGet()
+                        if (done >= partCount) {
+                            try { ctx.unregisterReceiver(this) } catch (_: Exception) {}
+                            val ok = failed.get() == 0
+                            callback(ok, if (ok) "OK" else "SmsManager resultCode=$resultCode")
+                        }
+                    }
+                }
+                ContextCompat.registerReceiver(
+                    context, receiver, IntentFilter(action), ContextCompat.RECEIVER_NOT_EXPORTED)
+
+                val intents = ArrayList<PendingIntent>(partCount)
+                repeat(partCount) {
+                    intents.add(PendingIntent.getBroadcast(
+                        context, counter.getAndIncrement(),
+                        Intent(action).setPackage(context.packageName),
+                        PendingIntent.FLAG_IMMUTABLE))
+                }
+                if (partCount == 1) smsManager.sendTextMessage(to, null, text, intents[0], null)
+                else smsManager.sendMultipartTextMessage(to, null, parts, intents, null)
+            } catch (e: Exception) {
+                callback(false, e.message ?: "Unknown error")
+            }
+        }
+
+        private val requestCounter = AtomicInteger(10000)
+
+        private fun getSmsManager(context: Context): SmsManager =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                context.getSystemService(SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                SmsManager.getDefault()
+            }
+    }
+
+    // ── Instanzfelder ─────────────────────────────────────────────────────────
+    private var wsUrl  = ""
+    private var token  = ""
+    private var ws: WebSocket? = null
+    private var running = false
+    private var reconnectDelay = 1000L   // ms, verdoppelt bis max 30 000 ms
+    private val reconnectHandler = Handler(Looper.getMainLooper())
+    private val notificationManager by lazy {
+        getSystemService(NotificationManager::class.java)
+    }
+
+    private val httpClient by lazy {
+        OkHttpClient.Builder()
+            .pingInterval(20, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.SECONDS)   // kein Lese-Timeout (persistente Verbindung)
+            .build()
+    }
+
+    // ── Service-Lifecycle ─────────────────────────────────────────────────────
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+        // Gespeicherte Konfig einlesen (für Neustart nach System-Kill)
+        val prefs = getSharedPreferences("CapacitorStorage", MODE_PRIVATE)
+        wsUrl = prefs.getString("el_gateway_url", "") ?: ""
+        token = prefs.getString("el_gateway_token", "") ?: ""
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_START -> {
+                wsUrl  = intent.getStringExtra(EXTRA_URL)   ?: wsUrl
+                token  = intent.getStringExtra(EXTRA_TOKEN) ?: token
+                if (wsUrl.isEmpty() || token.isEmpty()) return START_NOT_STICKY
+                running = true
+                startForeground(NOTIF_ID, buildNotification("Verbinde…"))
+                connect()
+            }
+            ACTION_STOP -> {
+                running = false
+                ws?.close(1000, "Gestoppt")
+                ws = null
+                isConnected = false
+                emit("statusChanged") {
+                    put("connected", false)
+                    put("lastError", "")
+                    put("sentCount", sentCount.get())
+                }
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            null -> {
+                // System-Neustart (START_STICKY) – Konfig aus SharedPrefs
+                if (wsUrl.isNotEmpty() && token.isNotEmpty()) {
+                    running = true
+                    startForeground(NOTIF_ID, buildNotification("Verbinde (Neustart)…"))
+                    connect()
+                } else {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+            }
+        }
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        running = false
+        reconnectHandler.removeCallbacksAndMessages(null)
+        ws?.close(1000, "Service zerstört")
+        ws = null
+        httpClient.dispatcher.cancelAll()
+        super.onDestroy()
+    }
+
+    // ── WebSocket-Verbindung ──────────────────────────────────────────────────
+
+    private fun connect() {
+        if (!running) return
+        reconnectHandler.removeCallbacksAndMessages(null)
+
+        val wsUri = toWsUrl(wsUrl)
+        val request = Request.Builder()
+            .url("$wsUri?token=$token")
+            .header("Authorization", "Bearer $token")
+            .build()
+
+        val connectTime = System.currentTimeMillis()
+
+        ws = httpClient.newWebSocket(request, object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                isConnected = true
+                lastError = null
+                // Backoff zurücksetzen
+                reconnectDelay = 1000L
+                webSocket.send("""{"type":"hello","role":"sms-gateway","version":"1.0"}""")
+                updateNotification("Verbunden ✓")
+                emitStatus()
+            }
+
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                handleMessage(webSocket, text)
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                isConnected = false
+                lastError = t.message ?: "Verbindungsfehler"
+                updateNotification("Getrennt – ${lastError?.take(40)}")
+                emitStatus()
+                // Backoff zurücksetzen wenn Verbindung ≥60 s stabil war
+                if (System.currentTimeMillis() - connectTime >= 60_000) reconnectDelay = 1000L
+                scheduleReconnect()
+            }
+
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                isConnected = false
+                emitStatus()
+                if (running) scheduleReconnect()
+            }
+        })
+    }
+
+    private fun handleMessage(ws: WebSocket, text: String) {
+        val msg = try { JSONObject(text) } catch (_: Exception) { return }
+
+        when (msg.optString("type")) {
+            "ping" -> ws.send("""{"type":"pong"}""")
+            "pong" -> { /* ignorieren */ }
+            "sms.send" -> {
+                val jobId = msg.optString("id").ifEmpty { return }
+                val to    = msg.optString("to").ifEmpty { return }
+                val body  = msg.optString("text")
+                sendSmsForJob(ws, jobId, to, body)
+            }
+        }
+    }
+
+    // ── SMS-Versand ───────────────────────────────────────────────────────────
+
+    private fun sendSmsForJob(ws: WebSocket, jobId: String, to: String, text: String) {
+        try {
+            val smsManager = getSmsManager(applicationContext)
+            val parts = smsManager.divideMessage(text) ?: arrayListOf(text)
+            val partCount = parts.size
+            val sentParts = AtomicInteger(0)
+            val failedParts = AtomicInteger(0)
+            val action = "cloud.einsatzleiter.smsgatewayplugin.SMS_SENT.$jobId"
+
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    val done = sentParts.incrementAndGet()
+                    if (resultCode != android.app.Activity.RESULT_OK) failedParts.incrementAndGet()
+                    if (done >= partCount) {
+                        try { context.unregisterReceiver(this) } catch (_: Exception) {}
+                        val ok = failedParts.get() == 0
+                        ws.send(buildSmsResult(jobId, ok,
+                            if (!ok) "SmsManager resultCode=$resultCode" else null))
+                        if (ok) {
+                            sentCount.incrementAndGet()
+                            lastSentTo = to
+                            lastSentAt = System.currentTimeMillis()
+                            emit("smsSent") {
+                                put("to", maskNumber(to))
+                                put("parts", partCount)
+                                put("at", lastSentAt)
+                            }
+                        }
+                        emitStatus()
+                    }
+                }
+            }
+            ContextCompat.registerReceiver(
+                applicationContext, receiver,
+                IntentFilter(action), ContextCompat.RECEIVER_NOT_EXPORTED)
+
+            val intents = ArrayList<PendingIntent>(partCount)
+            repeat(partCount) {
+                intents.add(PendingIntent.getBroadcast(
+                    applicationContext,
+                    requestCounter.getAndIncrement(),
+                    Intent(action).setPackage(packageName),
+                    PendingIntent.FLAG_IMMUTABLE))
+            }
+
+            if (partCount == 1) {
+                smsManager.sendTextMessage(to, null, text, intents[0], null)
+            } else {
+                smsManager.sendMultipartTextMessage(to, null, parts, intents, null)
+            }
+        } catch (e: Exception) {
+            ws.send(buildSmsResult(jobId, false, "Exception: ${e.message}"))
+        }
+    }
+
+    // ── Hilfs-Methoden ────────────────────────────────────────────────────────
+
+    private fun scheduleReconnect() {
+        if (!running) return
+        updateNotification("Reconnect in ${reconnectDelay / 1000}s…")
+        reconnectHandler.postDelayed({
+            reconnectDelay = minOf(reconnectDelay * 2, 30_000L)
+            connect()
+        }, reconnectDelay)
+    }
+
+    private fun toWsUrl(url: String): String = url
+        .replace("https://", "wss://")
+        .replace("http://", "ws://")
+        .trimEnd('/')
+
+    private fun buildSmsResult(jobId: String, ok: Boolean, error: String?): String =
+        if (ok) """{"type":"sms.result","id":"$jobId","ok":true,"provider_response":"OK"}"""
+        else    """{"type":"sms.result","id":"$jobId","ok":false,"error":"${error?.replace("\"","\\\"")}"}"""
+
+    private fun maskNumber(number: String): String {
+        val digits = number.filter { it.isDigit() }
+        return if (digits.length >= 6) "*".repeat(number.length - 4) + number.takeLast(4)
+               else "****"
+    }
+
+    private fun emitStatus() {
+        emit("statusChanged") {
+            put("connected", isConnected)
+            put("lastError", lastError ?: "")
+            put("sentCount", sentCount.get())
+            put("lastSentTo", lastSentTo ?: "")
+            put("lastSentAt", lastSentAt)
+        }
+    }
+
+    // ── Benachrichtigungen ────────────────────────────────────────────────────
+
+    private fun createNotificationChannel() {
+        val ch = NotificationChannel(
+            NOTIF_CHANNEL_ID,
+            "SMS-Gateway",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "einsatzleiter.cloud SMS-Gateway-Status"
+            setShowBadge(false)
+        }
+        notificationManager.createNotificationChannel(ch)
+    }
+
+    private fun buildNotification(status: String): Notification =
+        NotificationCompat.Builder(this, NOTIF_CHANNEL_ID)
+            .setContentTitle("SMS-Gateway aktiv")
+            .setContentText(status)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setOngoing(true)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .build()
+
+    private fun updateNotification(status: String) {
+        notificationManager.notify(NOTIF_ID, buildNotification(status))
+    }
+}
