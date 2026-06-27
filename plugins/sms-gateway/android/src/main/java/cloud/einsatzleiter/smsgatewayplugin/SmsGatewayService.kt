@@ -336,6 +336,7 @@ class SmsGatewayService : Service() {
                 val to    = msg.optString("to").ifEmpty { return }
                 val body  = msg.optString("text")
                 log("← SMS-Auftrag #${jobId.take(8)} an $to (${body.length} Zeichen)")
+                emit("smsQueued") { put("jobId", jobId) }
                 sendSmsForJob(ws, jobId, to, body)
             }
         }

@@ -268,6 +268,11 @@ let gwUrl = '', gwTokenMasked = '';
 const LOG_MAX = 50;
 const log = [];
 
+// Batch-Fortschritt (Server-seitige SMS-Aufträge)
+let batchQueued = 0, batchDone = 0;
+let batchTimer = null;
+let cachedSentCount = 0;
+
 // ── Verbindungslog ────────────────────────────────────────────────────────────
 const CONN_LOG_MAX = 300;
 const connEntries = [];
@@ -319,6 +324,7 @@ waitForCapacitor(async () => {
   // Plugin-Events abonnieren
   await SmsGateway.addListener('statusChanged', onStatusChanged);
   await SmsGateway.addListener('smsSent', onSmsSent);
+  await SmsGateway.addListener('smsQueued', onSmsQueued);
   await SmsGateway.addListener('logEvent', (e) => addLog(e.msg));
 
   addLog('Verbinde mit ' + new URL(url).hostname + '…');
@@ -354,9 +360,15 @@ function onStatusChanged(data) {
     document.getElementById('errorRow').style.display = 'none';
   }
   if (sentCount != null) {
-    document.getElementById('sentCount').textContent =
-      sentCount > 0 ? sentCount + ' SMS gesendet' : '';
+    cachedSentCount = sentCount;
+    renderSentCount();
   }
+}
+
+function onSmsQueued() {
+  clearTimeout(batchTimer);
+  batchQueued++;
+  renderSentCount();
 }
 
 function onSmsSent(data) {
@@ -365,6 +377,24 @@ function onSmsSent(data) {
   log.unshift({ to, time });
   if (log.length > LOG_MAX) log.pop();
   renderLog();
+  batchDone++;
+  renderSentCount();
+  if (batchDone >= batchQueued) {
+    batchTimer = setTimeout(() => {
+      batchQueued = 0;
+      batchDone = 0;
+      renderSentCount();
+    }, 5000);
+  }
+}
+
+function renderSentCount() {
+  const el = document.getElementById('sentCount');
+  if (batchQueued > 0) {
+    el.textContent = 'SMS ' + batchDone + ' von ' + batchQueued + ' versendet';
+  } else {
+    el.textContent = cachedSentCount > 0 ? cachedSentCount + ' SMS gesendet' : '';
+  }
 }
 
 function renderLog() {
@@ -410,19 +440,24 @@ async function sendTestSms() {
   if (!SmsGateway) { toast('Plugin nicht bereit'); return; }
 
   const btn = document.getElementById('btnSend');
+  if (btn.disabled) return;
   btn.disabled = true;
-  btn.textContent = '…';
+  btn.textContent = 'SMS 0 von 1 versendet…';
 
   try {
     await SmsGateway.sendTestSms({ to, text: 'Test-SMS von Einsatzcockpit' });
+    btn.textContent = 'SMS 1 von 1 versendet';
     toast('✓ Test-SMS gesendet');
     const time = new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
     log.unshift({ to: to.slice(-7).padStart(to.length, '•'), time });
     if (log.length > LOG_MAX) log.pop();
     renderLog();
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = 'Senden';
+    }, 2000);
   } catch (e) {
     toast('Fehler: ' + (e.message || e));
-  } finally {
     btn.disabled = false;
     btn.textContent = 'Senden';
   }
