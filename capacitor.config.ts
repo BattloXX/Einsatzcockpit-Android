@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'cloud.einsatzleiter.app',
-  appName: 'einsatzleiter.cloud',
+  appName: 'Einsatzcockpit',
   // www/index.html dient als Launcher: entscheidet beim Start ob Gateway-Modus
   // oder Einheit-Gerät-Modus (Weiterleitung zur Remote-PWA).
   webDir: 'www',
@@ -11,7 +11,9 @@ const config: CapacitorConfig = {
     // allowNavigation erlaubt WebView-Navigation zur Remote-PWA ohne externen Browser.
     cleartext: false,
     allowNavigation: [
-      'einsatzleiter.cloud',
+      'einsatzcockpit.com',
+      '*.einsatzcockpit.com',
+      'einsatzleiter.cloud',      // Übergangs-Redirect
       '*.einsatzleiter.cloud',
     ],
   },

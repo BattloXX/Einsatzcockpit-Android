@@ -1,10 +1,10 @@
 {
-  "name": "einsatzleiter-android",
+  "name": "einsatzcockpit-android",
   "version": "1.0.0",
-  "description": "Native Android-App für einsatzleiter.cloud (Capacitor-Wrapper)",
+  "description": "Native Android-App für einsatzcockpit.com (Capacitor-Wrapper)",
   "private": true,
   "scripts": {
-    "build": "echo 'Kein lokales Bundle – App lädt direkt von einsatzleiter.cloud'",
+    "build": "echo 'Kein lokales Bundle – App lädt direkt von einsatzcockpit.com'",
     "sync": "npx cap sync android",
     "open": "npx cap open android",
     "run:android": "npx cap run android"

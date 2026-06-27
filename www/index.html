@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>einsatzleiter.cloud</title>
+  <title>Einsatzcockpit</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -47,7 +47,7 @@
 <body>
   <div class="logo">🚒</div>
   <div>
-    <h1>einsatzleiter.cloud</h1>
+    <h1>Einsatzcockpit</h1>
     <div class="sub" id="statusLine">Startet…</div>
   </div>
   <div class="spinner" id="spinner"></div>
@@ -73,7 +73,7 @@ function waitForCapacitor(cb, timeout = 3000) {
       setTimeout(check, 100);
     } else {
       // Kein Capacitor – direkt zur PWA (Browser-Fallback)
-      window.location.href = 'https://einsatzleiter.cloud';
+      window.location.href = 'https://einsatzcockpit.com';
     }
   }
   check();
@@ -99,7 +99,7 @@ waitForCapacitor(async () => {
   if (deviceToken) {
     setStatus('Anmelden…');
     window.location.replace(
-      'https://einsatzleiter.cloud/geraet-login?token=' + encodeURIComponent(deviceToken));
+      'https://einsatzcockpit.com/geraet-login?token=' + encodeURIComponent(deviceToken));
     return;
   }
 
@@ -153,14 +153,14 @@ async function startScan() {
   }
 }
 
-const ALLOWED_HOST = 'einsatzleiter.cloud';
+const ALLOWED_HOSTS = ['einsatzcockpit.com', 'einsatzleiter.cloud'];
 
 async function handleQrResult(raw, Preferences, SmsGateway) {
   let parsed;
   try { parsed = new URL(raw); }
   catch (_) { showError('Ungültiger QR-Code.'); return; }
 
-  if (parsed.hostname !== ALLOWED_HOST) {
+  if (!ALLOWED_HOSTS.includes(parsed.hostname)) {
     showError('QR-Code von unbekanntem Server – abgelehnt.');
     return;
   }

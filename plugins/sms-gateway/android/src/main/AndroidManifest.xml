@@ -14,6 +14,12 @@
     <!-- Akku-Optimierung ausschalten (für Dauerbetrieb) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Netzwerkstatus für ConnectivityManager-Callback (sofortiger Reconnect bei Netzwechsel) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- WakeLock: CPU wach halten damit WebSocket-Pings auch im Hintergrund feuern -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <!-- Benachrichtigungen für Foreground-Service (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
