@@ -9,10 +9,15 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.telephony.SmsManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -31,7 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * Foreground-Service: Hält eine persistente WebSocket-Verbindung zur Main App
  * und versendet SMS-Aufträge (sms.send) über die eingebaute SIM-Karte.
  *
- * Protokoll: identisch mit Einsatzleiter-SMS-Gateway (PROTOCOL.md)
+ * Protokoll: identisch mit Einsatzcockpit SMS-Gateway (PROTOCOL.md)
  *   - hello → ping/pong → sms.send → SmsManager → sms.result
  */
 class SmsGatewayService : Service() {
@@ -42,8 +47,9 @@ class SmsGatewayService : Service() {
         const val EXTRA_URL    = "url"
         const val EXTRA_TOKEN  = "token"
 
-        private const val NOTIF_CHANNEL_ID = "el_sms_gateway"
+        private const val NOTIF_CHANNEL_ID = "ec_sms_gateway"
         private const val NOTIF_ID         = 7301
+        private const val WAKE_LOCK_TAG    = "einsatzcockpit:smsgw"
 
         // ── Zustand (von Plugin abgelesen) ────────────────────────────────────
         @Volatile var isConnected = false
@@ -125,19 +131,42 @@ class SmsGatewayService : Service() {
     private var wsUrl  = ""
     private var token  = ""
     private var ws: WebSocket? = null
-    private var running = false
+
+    // @Volatile: running wird von OkHttp-Threads und dem Main-Thread gelesen/geschrieben
+    @Volatile private var running = false
+
     private var reconnectDelay = 1000L   // ms, verdoppelt bis max 30 000 ms
     private val reconnectHandler = Handler(Looper.getMainLooper())
+
+    // Hält die CPU wach, damit Timer und WebSocket-Pings auch im Hintergrund feuern
+    private var wakeLock: PowerManager.WakeLock? = null
+
     private val notificationManager by lazy {
         getSystemService(NotificationManager::class.java)
     }
 
     private val httpClient by lazy {
         OkHttpClient.Builder()
-            .pingInterval(20, TimeUnit.SECONDS)
+            .pingInterval(20, TimeUnit.SECONDS)     // WS-Ping alle 20 s
             .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(0, TimeUnit.SECONDS)   // kein Lese-Timeout (persistente Verbindung)
+            .writeTimeout(15, TimeUnit.SECONDS)     // tote Verbindungen schneller erkennen
+            .readTimeout(0, TimeUnit.SECONDS)        // kein Lese-Timeout (persistente Verbindung)
             .build()
+    }
+
+    // Erkennt Netzwechsel (WLAN→Mobil u. ä.) und löst sofortigen Reconnect aus
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            if (running && !isConnected) {
+                log("Netzwerk verfügbar – verbinde neu…")
+                reconnectDelay = 1000L
+                reconnectHandler.removeCallbacksAndMessages(null)
+                reconnectHandler.post { connect() }
+            }
+        }
+        override fun onLost(network: Network) {
+            if (running) log("Netzwerk verloren")
+        }
     }
 
     // ── Service-Lifecycle ─────────────────────────────────────────────────────
@@ -162,6 +191,8 @@ class SmsGatewayService : Service() {
                 running = true
                 log("Service gestartet")
                 startForeground(NOTIF_ID, buildNotification("Verbinde…"))
+                acquireWakeLock()
+                registerNetworkCallback()
                 connect()
             }
             ACTION_STOP -> {
@@ -183,6 +214,8 @@ class SmsGatewayService : Service() {
                     running = true
                     log("Service neu gestartet (System/Boot)")
                     startForeground(NOTIF_ID, buildNotification("Verbinde (Neustart)…"))
+                    acquireWakeLock()
+                    registerNetworkCallback()
                     connect()
                 } else {
                     stopSelf()
@@ -198,8 +231,45 @@ class SmsGatewayService : Service() {
         reconnectHandler.removeCallbacksAndMessages(null)
         ws?.close(1000, "Service zerstört")
         ws = null
+        unregisterNetworkCallback()
+        releaseWakeLock()
         httpClient.dispatcher.cancelAll()
         super.onDestroy()
+    }
+
+    // ── WakeLock ──────────────────────────────────────────────────────────────
+
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        wakeLock = (getSystemService(PowerManager::class.java))
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+            .also { it.acquire() }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (_: Exception) {}
+        wakeLock = null
+    }
+
+    // ── NetworkCallback ───────────────────────────────────────────────────────
+
+    private fun registerNetworkCallback() {
+        try {
+            val cm = getSystemService(ConnectivityManager::class.java)
+            val req = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            cm.registerNetworkCallback(req, networkCallback)
+        } catch (_: Exception) {}
+    }
+
+    private fun unregisterNetworkCallback() {
+        try {
+            getSystemService(ConnectivityManager::class.java)
+                .unregisterNetworkCallback(networkCallback)
+        } catch (_: Exception) {}
     }
 
     // ── WebSocket-Verbindung ──────────────────────────────────────────────────
@@ -221,7 +291,6 @@ class SmsGatewayService : Service() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 isConnected = true
                 lastError = null
-                // Backoff zurücksetzen
                 reconnectDelay = 1000L
                 log("✓ Verbunden – hello gesendet")
                 webSocket.send("""{"type":"hello","role":"sms-gateway","version":"1.0"}""")
@@ -379,7 +448,7 @@ class SmsGatewayService : Service() {
             "SMS-Gateway",
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "einsatzleiter.cloud SMS-Gateway-Status"
+            description = "Einsatzcockpit SMS-Gateway-Status"
             setShowBadge(false)
         }
         notificationManager.createNotificationChannel(ch)

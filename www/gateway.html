@@ -160,6 +160,11 @@
     }
     .action-row button { flex: 1; min-width: 120px; }
 
+    /* ── Akku-Warnung ────────────────────────────────────────────────────── */
+    .card-warning { border-color: var(--yellow); }
+    .card-warning .card-label { color: var(--yellow); }
+    .card-warning p { font-size: .85rem; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
+
     /* ── Toast ───────────────────────────────────────────────────────────── */
     #toast {
       position: fixed;
@@ -184,7 +189,7 @@
     <div class="header-icon">📡</div>
     <div>
       <div class="header-title">SMS-Gateway</div>
-      <div class="header-sub" id="headerSub">einsatzleiter.cloud</div>
+      <div class="header-sub" id="headerSub">einsatzcockpit.com</div>
     </div>
   </div>
 
@@ -216,6 +221,13 @@
       <input type="tel" id="testTo" placeholder="+43664…" autocomplete="off">
       <button class="btn-primary" id="btnSend" onclick="sendTestSms()">Senden</button>
     </div>
+  </div>
+
+  <!-- Akku-Optimierung-Warnung (wird ausgeblendet sobald Optimierung deaktiviert) -->
+  <div class="card card-warning" id="batteryWarning" style="display:none;">
+    <div class="card-label">Akku-Optimierung aktiv</div>
+    <p>Android kann diese App im Hintergrund beenden und die Gateway-Verbindung unterbrechen. Für zuverlässigen Dauerbetrieb bitte deaktivieren.</p>
+    <button class="btn-primary" onclick="requestBatteryOpt()">Akku-Optimierung deaktivieren</button>
   </div>
 
   <!-- Aktionen -->
@@ -317,6 +329,14 @@ waitForCapacitor(async () => {
 
   // Service starten (falls noch nicht laufend)
   await SmsGateway.startGateway({ url, token });
+
+  // Akku-Optimierung prüfen und ggf. Warnung zeigen
+  if (SmsGateway.getBatteryOptimizationStatus) {
+    try {
+      const { ignored } = await SmsGateway.getBatteryOptimizationStatus();
+      if (!ignored) document.getElementById('batteryWarning').style.display = '';
+    } catch (_) {}
+  }
 });
 
 // ── Status-Handler ────────────────────────────────────────────────────────────
@@ -394,7 +414,7 @@ async function sendTestSms() {
   btn.textContent = '…';
 
   try {
-    await SmsGateway.sendTestSms({ to, text: 'Test-SMS von einsatzleiter.cloud' });
+    await SmsGateway.sendTestSms({ to, text: 'Test-SMS von Einsatzcockpit' });
     toast('✓ Test-SMS gesendet');
     const time = new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
     log.unshift({ to: to.slice(-7).padStart(to.length, '•'), time });
@@ -406,6 +426,36 @@ async function sendTestSms() {
     btn.disabled = false;
     btn.textContent = 'Senden';
   }
+}
+
+// ── Akku-Optimierung ──────────────────────────────────────────────────────────
+async function requestBatteryOpt() {
+  if (!SmsGateway) return;
+  try {
+    const result = await SmsGateway.requestBatteryOptimization();
+    if (result.ignored) {
+      hideBatteryWarning();
+    } else if (result.pending) {
+      // Systemdialog geöffnet – Status nach Rückkehr erneut prüfen
+      toast('Einstellungen geöffnet – bitte bestätigen');
+      document.addEventListener('resume', checkBatteryOnResume, { once: true });
+    }
+  } catch (e) {
+    toast('Fehler: ' + (e.message || e));
+  }
+}
+
+async function checkBatteryOnResume() {
+  if (!SmsGateway) return;
+  try {
+    const { ignored } = await SmsGateway.getBatteryOptimizationStatus();
+    if (ignored) hideBatteryWarning();
+  } catch (_) {}
+}
+
+function hideBatteryWarning() {
+  document.getElementById('batteryWarning').style.display = 'none';
+  addLog('Akku-Optimierung für dieses Gerät deaktiviert');
 }
 
 // ── Aktionen ──────────────────────────────────────────────────────────────────
