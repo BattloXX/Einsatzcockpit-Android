@@ -158,7 +158,7 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: einsatzleiter.apk
+          name: einsatzcockpit.apk
           path: |
             android/app/build/outputs/apk/release/app-release-signed.apk
             android/app/build/outputs/apk/release/app-release-unsigned.apk
@@ -169,11 +169,21 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: android/app/build/outputs/apk/release/app-release-signed.apk
-          name: einsatzleiter.cloud ${{ github.ref_name }}
+          name: Einsatzcockpit Android ${{ github.ref_name }}
           body: |
+            ## Einsatzcockpit Android ${{ github.ref_name }}
+
+            Native Android-App für [einsatzcockpit.com](https://einsatzcockpit.com) —
+            Einheit-Gerät (WebView-Wrapper) und SMS-Gateway-Modus.
+
             ## Installation
             1. APK-Datei auf das Android-Gerät übertragen
-            2. Einstellungen → Sicherheit → "Unbekannte Quellen" erlauben
+            2. Einstellungen → Sicherheit → „Unbekannte Quellen" erlauben
             3. APK installieren
             4. App starten → QR-Code aus dem Admin-Bereich scannen
                (Admin → Geräte-Login → Einheit-Gerät oder SMS-Gateway registrieren)
+
+            ## SMS-Gateway: Nach der Installation
+            Beim ersten Start im Gateway-Modus erscheint ein Hinweis zur
+            **Akku-Optimierung**. Bitte deaktivieren, damit die Verbindung
+            dauerhaft bestehen bleibt und keine SMS verloren gehen.
