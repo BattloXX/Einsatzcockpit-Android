@@ -432,15 +432,30 @@ async function sendTestSms() {
 async function requestBatteryOpt() {
   if (!SmsGateway) return;
   try {
-    const { ignored } = await SmsGateway.requestBatteryOptimization();
-    if (ignored) {
-      document.getElementById('batteryWarning').style.display = 'none';
-      toast('Akku-Optimierung deaktiviert');
-      addLog('Akku-Optimierung für dieses Gerät deaktiviert');
+    const result = await SmsGateway.requestBatteryOptimization();
+    if (result.ignored) {
+      hideBatteryWarning();
+    } else if (result.pending) {
+      // Systemdialog geöffnet – Status nach Rückkehr erneut prüfen
+      toast('Einstellungen geöffnet – bitte bestätigen');
+      document.addEventListener('resume', checkBatteryOnResume, { once: true });
     }
   } catch (e) {
     toast('Fehler: ' + (e.message || e));
   }
+}
+
+async function checkBatteryOnResume() {
+  if (!SmsGateway) return;
+  try {
+    const { ignored } = await SmsGateway.getBatteryOptimizationStatus();
+    if (ignored) hideBatteryWarning();
+  } catch (_) {}
+}
+
+function hideBatteryWarning() {
+  document.getElementById('batteryWarning').style.display = 'none';
+  addLog('Akku-Optimierung für dieses Gerät deaktiviert');
 }
 
 // ── Aktionen ──────────────────────────────────────────────────────────────────

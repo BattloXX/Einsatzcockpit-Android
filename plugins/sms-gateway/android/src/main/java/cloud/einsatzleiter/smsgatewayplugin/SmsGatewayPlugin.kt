@@ -5,8 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
-import com.getcapacitor.ActivityCallback
-import com.getcapacitor.ActivityResult
 import com.getcapacitor.JSObject
 import com.getcapacitor.PermissionState
 import com.getcapacitor.Plugin
@@ -27,7 +25,7 @@ import com.getcapacitor.annotation.PermissionCallback
  *   SmsGateway.checkPermission() → { granted }
  *   SmsGateway.requestPermission() → { granted }
  *   SmsGateway.getBatteryOptimizationStatus() → { ignored }
- *   SmsGateway.requestBatteryOptimization() → { ignored }
+ *   SmsGateway.requestBatteryOptimization() → { ignored } | { pending: true } (öffnet Systemdialog, JS prüft Status beim resume)
  *
  * Events:
  *   statusChanged  → { connected, lastError, sentCount, lastSentTo, lastSentAt }
@@ -149,19 +147,14 @@ class SmsGatewayPlugin : Plugin() {
         }
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
             data = Uri.parse("package:${context.packageName}")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         try {
-            startActivityForResult(call, intent, "onBatteryOptResult")
+            context.startActivity(intent)
+            // Resolve immediately; JS prüft den Status beim resume-Event
+            call.resolve(JSObject().apply { put("pending", true) })
         } catch (e: Exception) {
             call.reject("Konnte Einstellungen nicht öffnen: ${e.message}")
         }
-    }
-
-    @ActivityCallback
-    private fun onBatteryOptResult(call: PluginCall?, result: ActivityResult) {
-        val pm = context.getSystemService(PowerManager::class.java)
-        call?.resolve(JSObject().apply {
-            put("ignored", pm.isIgnoringBatteryOptimizations(context.packageName))
-        })
     }
 }
