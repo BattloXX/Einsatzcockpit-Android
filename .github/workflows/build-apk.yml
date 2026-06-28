@@ -40,6 +40,14 @@ jobs:
           mkdir -p android/app/src/main/assets
           npx cap sync android
 
+      - name: Patch Version in build.gradle
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          VERSION_CODE=${{ github.run_number }}
+          sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" android/app/build.gradle
+          sed -i 's/versionName "[^"]*"/versionName "'"$VERSION"'"/' android/app/build.gradle
+          echo "versionName=$VERSION, versionCode=$VERSION_CODE"
+
       - name: Generate app icons from Logo-rot.png
         run: |
           cp assets/Logo-rot.png assets/icon.png
@@ -171,7 +179,7 @@ jobs:
           files: android/app/build/outputs/apk/release/app-release-signed.apk
           name: Einsatzcockpit Android ${{ github.ref_name }}
           body: |
-            ## Einsatzcockpit Android ${{ github.ref_name }}
+            ## Einsatzcockpit Android ${{ github.ref_name }} (Build ${{ github.run_number }})
 
             Native Android-App für [einsatzcockpit.com](https://einsatzcockpit.com) —
             Einheit-Gerät (WebView-Wrapper) und SMS-Gateway-Modus.
