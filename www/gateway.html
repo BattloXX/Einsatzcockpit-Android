@@ -336,10 +336,6 @@ waitForCapacitor(async () => {
   // Service starten (falls noch nicht laufend)
   await SmsGateway.startGateway({ url, token });
 
-  // Bildschirm an – Gateway-Status immer sichtbar, JS-Thread wird nicht gedrosselt
-  const KeepAwake = window.Capacitor?.Plugins?.KeepAwake;
-  if (KeepAwake) { try { await KeepAwake.keepAwake(); } catch (_) {} }
-
   // Akku-Optimierung prüfen und ggf. Warnung zeigen
   if (SmsGateway.getBatteryOptimizationStatus) {
     try {

@@ -98,9 +98,10 @@ waitForCapacitor(async () => {
   const { value: deviceToken } = await Preferences.get({ key: 'el_device_token' });
   if (deviceToken) {
     setStatus('Anmelden…');
-    // Bildschirm dauerhaft an – verhindert JS-Drosselung im WebView (für fest montierte Tablets)
-    const KeepAwake = window.Capacitor?.Plugins?.KeepAwake;
-    if (KeepAwake) { try { await KeepAwake.keepAwake(); } catch (_) {} }
+    // ForegroundService starten – App-Prozess bleibt im Hintergrund am Leben,
+    // auch wenn der Bildschirm ausgeht (Bildschirm darf ausgehen, App nicht)
+    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (DevKA) { try { await DevKA.startKeepalive(); } catch (_) {} }
     window.location.replace(
       'https://einsatzcockpit.com/geraet-login?token=' + encodeURIComponent(deviceToken));
     return;
