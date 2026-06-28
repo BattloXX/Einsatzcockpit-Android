@@ -165,6 +165,20 @@
     .card-warning .card-label { color: var(--yellow); }
     .card-warning p { font-size: .85rem; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
 
+    /* ── App-Version ─────────────────────────────────────────────────────── */
+    .version-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .85rem;
+      margin-top: 6px;
+    }
+    .version-row:first-of-type { margin-top: 0; }
+    .version-label { color: var(--muted); min-width: 80px; }
+    .version-value { font-family: monospace; color: var(--text); }
+    .update-available { color: var(--yellow); }
+    .up-to-date { color: var(--green); }
+
     /* ── Toast ───────────────────────────────────────────────────────────── */
     #toast {
       position: fixed;
@@ -233,6 +247,22 @@
   <!-- Aktionen -->
   <div class="action-row">
     <button class="btn-ghost" onclick="rescan()">🔲 Neu konfigurieren (QR)</button>
+  </div>
+
+  <!-- App-Version / Update -->
+  <div class="card" id="updateCard">
+    <div class="card-label">App-Version</div>
+    <div class="version-row">
+      <span class="version-label">Installiert</span>
+      <span class="version-value" id="installedVersion">–</span>
+    </div>
+    <div class="version-row">
+      <span class="version-label">Verfügbar</span>
+      <span class="version-value" id="availableVersion">Prüfe…</span>
+    </div>
+    <div id="updateBtnRow" style="margin-top:12px;display:none;">
+      <button class="btn-primary" style="width:100%;" onclick="downloadApk()">⬇ Update herunterladen</button>
+    </div>
   </div>
 
   <!-- Verbindungslog -->
@@ -343,6 +373,9 @@ waitForCapacitor(async () => {
       if (!ignored) document.getElementById('batteryWarning').style.display = '';
     } catch (_) {}
   }
+
+  // App-Version & Update-Check
+  checkForUpdate();
 });
 
 // ── Status-Handler ────────────────────────────────────────────────────────────
@@ -512,6 +545,59 @@ async function disconnect() {
     await Preferences.remove({ key: 'el_gateway_token' });
   }
   window.location.href = 'index.html';
+}
+
+// ── App-Update-Check ──────────────────────────────────────────────────────────
+const GITHUB_REPO = 'BattloXX/Einsatzcockpit-Android';
+let latestApkUrl = null;
+
+async function checkForUpdate() {
+  // Installierte Version via Plugin
+  if (SmsGateway && SmsGateway.getAppVersion) {
+    try {
+      const { versionName } = await SmsGateway.getAppVersion();
+      document.getElementById('installedVersion').textContent = 'v' + versionName;
+    } catch (_) {
+      document.getElementById('installedVersion').textContent = 'unbekannt';
+    }
+  }
+
+  // Neueste Release von GitHub
+  try {
+    const res = await fetch(
+      'https://api.github.com/repos/' + GITHUB_REPO + '/releases/latest',
+      { headers: { Accept: 'application/vnd.github+json' } }
+    );
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rel = await res.json();
+    const latestTag = rel.tag_name || '–';
+
+    const asset = (rel.assets || []).find(a => a.name.endsWith('.apk'));
+    if (asset) latestApkUrl = asset.browser_download_url;
+
+    const installedEl = document.getElementById('installedVersion');
+    const availableEl = document.getElementById('availableVersion');
+
+    const installedVer = installedEl.textContent.replace(/^v/, '');
+    const latestVer    = latestTag.replace(/^v/, '');
+
+    if (latestVer && installedVer !== '–' && installedVer !== 'unbekannt' && latestVer !== installedVer) {
+      availableEl.textContent = latestTag;
+      availableEl.className = 'version-value update-available';
+      document.getElementById('updateBtnRow').style.display = '';
+      addLog('Update verfügbar: ' + latestTag + ' (installiert: v' + installedVer + ')');
+    } else {
+      availableEl.textContent = latestTag + ' ✓';
+      availableEl.className = 'version-value up-to-date';
+    }
+  } catch (_) {
+    document.getElementById('availableVersion').textContent = 'Nicht abrufbar';
+  }
+}
+
+function downloadApk() {
+  if (latestApkUrl) window.open(latestApkUrl, '_system');
+  else toast('Kein Download-Link verfügbar');
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
