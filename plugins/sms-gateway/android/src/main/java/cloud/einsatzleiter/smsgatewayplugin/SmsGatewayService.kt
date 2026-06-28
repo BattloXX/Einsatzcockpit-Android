@@ -499,14 +499,22 @@ class SmsGatewayService : Service() {
         notificationManager.createNotificationChannel(ch)
     }
 
-    private fun buildNotification(status: String): Notification =
-        NotificationCompat.Builder(this, NOTIF_CHANNEL_ID)
+    private fun buildNotification(status: String): Notification {
+        val tapIntent = packageManager.getLaunchIntentForPackage(packageName)
+            ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP) }
+        val tapPending = if (tapIntent != null)
+            PendingIntent.getActivity(this, 0, tapIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        else null
+        return NotificationCompat.Builder(this, NOTIF_CHANNEL_ID)
             .setContentTitle("SMS-Gateway aktiv")
             .setContentText(status)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .apply { tapPending?.let { setContentIntent(it) } }
             .build()
+    }
 
     private fun updateNotification(status: String) {
         notificationManager.notify(NOTIF_ID, buildNotification(status))
