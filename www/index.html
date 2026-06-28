@@ -98,6 +98,10 @@ waitForCapacitor(async () => {
   const { value: deviceToken } = await Preferences.get({ key: 'el_device_token' });
   if (deviceToken) {
     setStatus('Anmelden…');
+    // ForegroundService starten – App-Prozess bleibt im Hintergrund am Leben,
+    // auch wenn der Bildschirm ausgeht (Bildschirm darf ausgehen, App nicht)
+    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (DevKA) { try { await DevKA.startKeepalive(); } catch (_) {} }
     window.location.replace(
       'https://einsatzcockpit.com/geraet-login?token=' + encodeURIComponent(deviceToken));
     return;

@@ -31,6 +31,12 @@
             android:exported="false"
             android:stopWithTask="false" />
 
+        <service
+            android:name="cloud.einsatzleiter.smsgatewayplugin.DeviceKeepaliveService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false"
+            android:stopWithTask="false" />
+
         <receiver
             android:name="cloud.einsatzleiter.smsgatewayplugin.BootReceiver"
             android:enabled="true"

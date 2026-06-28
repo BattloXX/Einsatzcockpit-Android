@@ -30,5 +30,15 @@ class BootReceiver : BroadcastReceiver() {
             }
             context.startForegroundService(serviceIntent)
         }
+
+        // Einheit-Gerät-Modus: DeviceKeepaliveService starten damit der Prozess
+        // nach dem Boot aktiv bleibt, bevor der Nutzer die App öffnet
+        val deviceToken = prefs.getString("el_device_token", null)
+        if (!deviceToken.isNullOrEmpty()) {
+            val keepaliveIntent = Intent(context, DeviceKeepaliveService::class.java).apply {
+                this.action = DeviceKeepaliveService.ACTION_START
+            }
+            context.startForegroundService(keepaliveIntent)
+        }
     }
 }
