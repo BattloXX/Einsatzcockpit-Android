@@ -98,6 +98,9 @@ waitForCapacitor(async () => {
   const { value: deviceToken } = await Preferences.get({ key: 'el_device_token' });
   if (deviceToken) {
     setStatus('Anmelden…');
+    // Bildschirm dauerhaft an – verhindert JS-Drosselung im WebView (für fest montierte Tablets)
+    const KeepAwake = window.Capacitor?.Plugins?.KeepAwake;
+    if (KeepAwake) { try { await KeepAwake.keepAwake(); } catch (_) {} }
     window.location.replace(
       'https://einsatzcockpit.com/geraet-login?token=' + encodeURIComponent(deviceToken));
     return;

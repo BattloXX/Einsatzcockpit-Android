@@ -137,6 +137,7 @@ class SmsGatewayService : Service() {
 
     private var reconnectDelay = 1000L   // ms, verdoppelt bis max 30 000 ms
     private val reconnectHandler = Handler(Looper.getMainLooper())
+    private val watchdogHandler  = Handler(Looper.getMainLooper())
 
     // Hält die CPU wach, damit Timer und WebSocket-Pings auch im Hintergrund feuern
     private var wakeLock: PowerManager.WakeLock? = null
@@ -165,7 +166,16 @@ class SmsGatewayService : Service() {
             }
         }
         override fun onLost(network: Network) {
-            if (running) log("Netzwerk verloren")
+            if (running) {
+                log("Netzwerk verloren – WebSocket schließen")
+                ws?.close(1001, "Netzwerk verloren")
+                ws = null
+                isConnected = false
+                reconnectDelay = 1000L
+                emitStatus()
+                // onClosed des alten WS löst scheduleReconnect() aus;
+                // onAvailable triggert sofort connect() wenn Netz zurückkommt
+            }
         }
     }
 
@@ -194,9 +204,11 @@ class SmsGatewayService : Service() {
                 acquireWakeLock()
                 registerNetworkCallback()
                 connect()
+                startWatchdog()
             }
             ACTION_STOP -> {
                 running = false
+                stopWatchdog()
                 ws?.close(1000, "Gestoppt")
                 ws = null
                 isConnected = false
@@ -217,6 +229,7 @@ class SmsGatewayService : Service() {
                     acquireWakeLock()
                     registerNetworkCallback()
                     connect()
+                    startWatchdog()
                 } else {
                     stopSelf()
                     return START_NOT_STICKY
@@ -228,6 +241,7 @@ class SmsGatewayService : Service() {
 
     override fun onDestroy() {
         running = false
+        stopWatchdog()
         reconnectHandler.removeCallbacksAndMessages(null)
         ws?.close(1000, "Service zerstört")
         ws = null
@@ -243,7 +257,10 @@ class SmsGatewayService : Service() {
         if (wakeLock?.isHeld == true) return
         wakeLock = (getSystemService(PowerManager::class.java))
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
-            .also { it.acquire() }
+            .also {
+                it.setReferenceCounted(false)
+                it.acquire(24 * 60 * 60 * 1000L)   // max. 24 h; Watchdog re-acquires bei Bedarf
+            }
     }
 
     private fun releaseWakeLock() {
@@ -251,6 +268,33 @@ class SmsGatewayService : Service() {
             if (wakeLock?.isHeld == true) wakeLock?.release()
         } catch (_: Exception) {}
         wakeLock = null
+    }
+
+    // ── Watchdog ──────────────────────────────────────────────────────────────
+    // Unabhängige 30-s-Schleife: stellt sicher dass ein Reconnect auch dann
+    // ausgelöst wird wenn Handler-Callbacks durch Doze verschluckt wurden.
+
+    private val watchdogRunnable = object : Runnable {
+        override fun run() {
+            if (!running) return
+            if (!isConnected) {
+                log("Watchdog: nicht verbunden – erzwinge Reconnect")
+                acquireWakeLock()           // WakeLock nach 24-h-Timeout erneuern
+                reconnectDelay = 1000L
+                reconnectHandler.removeCallbacksAndMessages(null)
+                connect()
+            }
+            watchdogHandler.postDelayed(this, 30_000L)
+        }
+    }
+
+    private fun startWatchdog() {
+        watchdogHandler.removeCallbacksAndMessages(null)
+        watchdogHandler.postDelayed(watchdogRunnable, 30_000L)
+    }
+
+    private fun stopWatchdog() {
+        watchdogHandler.removeCallbacksAndMessages(null)
     }
 
     // ── NetworkCallback ───────────────────────────────────────────────────────
