@@ -26,6 +26,7 @@ import com.getcapacitor.annotation.PermissionCallback
  *   SmsGateway.requestPermission() → { granted }
  *   SmsGateway.getBatteryOptimizationStatus() → { ignored }
  *   SmsGateway.requestBatteryOptimization() → { ignored } | { pending: true } (öffnet Systemdialog, JS prüft Status beim resume)
+ *   SmsGateway.getAppVersion() → { versionName }
  *
  * Events:
  *   statusChanged  → { connected, lastError, sentCount, lastSentTo, lastSentAt }
@@ -126,6 +127,20 @@ class SmsGatewayPlugin : Plugin() {
     private fun onPermissionResult(call: PluginCall) {
         val granted = getPermissionState("sendSms") == PermissionState.GRANTED
         call.resolve(JSObject().apply { put("granted", granted) })
+    }
+
+    // ── App-Version ───────────────────────────────────────────────────────────
+
+    @PluginMethod
+    fun getAppVersion(call: PluginCall) {
+        try {
+            val pi = context.packageManager.getPackageInfo(context.packageName, 0)
+            call.resolve(JSObject().apply {
+                put("versionName", pi.versionName ?: "unbekannt")
+            })
+        } catch (e: Exception) {
+            call.reject("Version nicht abrufbar: ${e.message}")
+        }
     }
 
     // ── Akku-Optimierung ──────────────────────────────────────────────────────
