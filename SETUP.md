@@ -146,6 +146,34 @@ KEYSTORE_FILE (Base64)
 3. Im Backend: Admin → Geräte-Login → Neues Gerät erstellen → QR scannen
 4. App bleibt dauerhaft eingeloggt (Token gespeichert)
 
+## SMS-Gateway: zuverlässiger 24/7-Dauerbetrieb
+
+Der SMS-Gateway-Modus hält eine persistente WebSocket-Verbindung zum Server. Damit Android
+diese Verbindung nicht „nach einigen Stunden" kappt, sind folgende Punkte wichtig:
+
+1. **Akku-Optimierung deaktivieren (zwingend).** Die App fordert das beim Start an. Ohne
+   Ausnahme kappt der Doze-Modus den Netzwerkzugriff, sobald das Gerät länger ruht – auch
+   wenn die CPU per WakeLock wach ist. Einstellungen → Apps → Einsatzcockpit → Akku →
+   „Nicht optimieren" / „Unbeschränkt".
+2. **Foreground-Service-Typ `specialUse`.** Die Services nutzen `specialUse` statt `dataSync`.
+   `dataSync` hat unter **Android 15** ein kumulatives Laufzeitlimit von ~6 h/24 h, das den
+   Dauerbetrieb beendet. `specialUse` hat kein solches Limit.
+3. **OEM-spezifische Hintergrund-Beschränkungen.** Viele Hersteller killen Hintergrund-Apps
+   trotz deaktivierter Akku-Optimierung. Zusätzlich erforderlich:
+   - **Xiaomi/Redmi (MIUI/HyperOS):** „Autostart" aktivieren; Akku → „Keine Einschränkungen";
+     in den Recent-Apps die App „sperren" (Schloss-Symbol).
+   - **Huawei/Honor (EMUI):** App-Start → „Manuell verwalten" → Autostart/Hintergrund/Wecken
+     erlauben.
+   - **Samsung (One UI):** Akku → „Apps in den Ruhezustand versetzen" → App ausschließen;
+     „Nicht überwachte Apps".
+   - **OnePlus/Oppo/Realme (ColorOS):** Akku → „Hintergrundaktivität zulassen"; Autostart an.
+   Übersicht: https://dontkillmyapp.com/
+4. **Gerät am Strom lassen** und ein zuverlässiges Netz (WLAN/Mobil) sicherstellen. Bei
+   Netzwechsel verbindet die App automatisch neu.
+
+Den Status prüfst du im Gateway-Bildschirm (Verbindungslog) – nach einem Langzeittest
+(>8 h) darf keine Trennung mehr auftreten.
+
 ## Architektur
 
 Die App lädt `https://einsatzleiter.cloud` in einem WebView. Das Backend-seitige

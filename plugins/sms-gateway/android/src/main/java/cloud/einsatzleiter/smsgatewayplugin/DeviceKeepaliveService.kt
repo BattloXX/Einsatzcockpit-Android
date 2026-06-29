@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
@@ -48,7 +50,7 @@ class DeviceKeepaliveService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        startForeground(NOTIF_ID, buildNotification())
+        startForegroundCompat()
         acquireWakeLock()
         return START_STICKY
     }
@@ -56,6 +58,25 @@ class DeviceKeepaliveService : Service() {
     override fun onDestroy() {
         releaseWakeLock()
         super.onDestroy()
+    }
+
+    /** Defensiv: bei einem System-Timeout Foreground erneuern statt gekillt zu werden. */
+    override fun onTimeout(startId: Int) {
+        try { startForegroundCompat() } catch (_: Exception) {}
+        acquireWakeLock()
+    }
+
+    /**
+     * startForeground mit explizitem FGS-Typ ab Android 14 (API 34, ab dem
+     * FOREGROUND_SERVICE_TYPE_SPECIAL_USE existiert). Darunter genügt das Manifest.
+     */
+    private fun startForegroundCompat() {
+        val notif = buildNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIF_ID, notif)
+        }
     }
 
     private fun acquireWakeLock() {

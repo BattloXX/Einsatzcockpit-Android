@@ -4,9 +4,14 @@
     <!-- SMS-Versand über SIM-Karte -->
     <uses-permission android:name="android.permission.SEND_SMS" />
 
-    <!-- Hintergrund-Service -->
+    <!-- Hintergrund-Service.
+         specialUse statt dataSync: dataSync hat unter Android 15 (targetSdk 35) ein
+         kumulatives Laufzeitlimit von ~6 h/24 h, danach beendet das System den Service
+         (onTimeout) -> Verbindung bricht "nach einigen Stunden" ab. specialUse hat kein
+         Zeitlimit und ist fuer dauerhafte, nicht anderweitig kategorisierte Aufgaben
+         (persistente Gateway-Verbindung) vorgesehen. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!-- Neustart nach Boot -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -27,15 +32,23 @@
 
         <service
             android:name="cloud.einsatzleiter.smsgatewayplugin.SmsGatewayService"
-            android:foregroundServiceType="dataSync"
+            android:foregroundServiceType="specialUse"
             android:exported="false"
-            android:stopWithTask="false" />
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Persistente WebSocket-Verbindung zum Versand von Einsatz-SMS ueber die SIM-Karte (SMS-Gateway-Betrieb rund um die Uhr)." />
+        </service>
 
         <service
             android:name="cloud.einsatzleiter.smsgatewayplugin.DeviceKeepaliveService"
-            android:foregroundServiceType="dataSync"
+            android:foregroundServiceType="specialUse"
             android:exported="false"
-            android:stopWithTask="false" />
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Haelt die Einsatz-Geraete-Anzeige im Dauerbetrieb aktiv, damit Live-Updates auch bei ausgeschaltetem Bildschirm empfangen werden." />
+        </service>
 
         <receiver
             android:name="cloud.einsatzleiter.smsgatewayplugin.BootReceiver"

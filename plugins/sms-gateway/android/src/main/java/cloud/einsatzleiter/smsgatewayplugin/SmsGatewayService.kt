@@ -9,6 +9,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -135,6 +136,10 @@ class SmsGatewayService : Service() {
     // @Volatile: running wird von OkHttp-Threads und dem Main-Thread gelesen/geschrieben
     @Volatile private var running = false
 
+    // Verhindert dass mehrere Quellen (Watchdog, Reconnect, NetworkCallback) gleichzeitig
+    // einen WebSocket aufbauen und dadurch doppelte/tote Verbindungen entstehen.
+    @Volatile private var connecting = false
+
     private var reconnectDelay = 1000L   // ms, verdoppelt bis max 30 000 ms
     private val reconnectHandler = Handler(Looper.getMainLooper())
     private val watchdogHandler  = Handler(Looper.getMainLooper())
@@ -200,7 +205,7 @@ class SmsGatewayService : Service() {
                 if (wsUrl.isEmpty() || token.isEmpty()) return START_NOT_STICKY
                 running = true
                 log("Service gestartet")
-                startForeground(NOTIF_ID, buildNotification("Verbinde…"))
+                startForegroundCompat("Verbinde…")
                 acquireWakeLock()
                 registerNetworkCallback()
                 connect()
@@ -225,7 +230,7 @@ class SmsGatewayService : Service() {
                 if (wsUrl.isNotEmpty() && token.isNotEmpty()) {
                     running = true
                     log("Service neu gestartet (System/Boot)")
-                    startForeground(NOTIF_ID, buildNotification("Verbinde (Neustart)…"))
+                    startForegroundCompat("Verbinde (Neustart)…")
                     acquireWakeLock()
                     registerNetworkCallback()
                     connect()
@@ -249,6 +254,35 @@ class SmsGatewayService : Service() {
         releaseWakeLock()
         httpClient.dispatcher.cancelAll()
         super.onDestroy()
+    }
+
+    /**
+     * Defensive Absicherung: Sollte das System künftig (oder bei anderem FGS-Typ) ein
+     * Laufzeitlimit durchsetzen, wird hier statt eines Kills die Verbindung sauber neu
+     * aufgebaut. Mit foregroundServiceType=specialUse greift derzeit kein Limit.
+     */
+    override fun onTimeout(startId: Int) {
+        log("onTimeout vom System – Foreground erneuern & reconnecten")
+        if (!running) { stopSelf(); return }
+        try { startForegroundCompat("Verbinde (Neustart)…") } catch (_: Exception) {}
+        acquireWakeLock()
+        isConnected = false
+        reconnectDelay = 1000L
+        connect()
+    }
+
+    /**
+     * startForeground mit explizitem FGS-Typ ab Android 14 (API 34, ab dem
+     * FOREGROUND_SERVICE_TYPE_SPECIAL_USE existiert). Darunter genügt die
+     * Manifest-Deklaration.
+     */
+    private fun startForegroundCompat(status: String) {
+        val notif = buildNotification(status)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIF_ID, notif)
+        }
     }
 
     // ── WakeLock ──────────────────────────────────────────────────────────────
@@ -277,9 +311,11 @@ class SmsGatewayService : Service() {
     private val watchdogRunnable = object : Runnable {
         override fun run() {
             if (!running) return
+            // WakeLock bei JEDEM Durchlauf erneuern – sonst läuft der 24-h-Lock im
+            // dauerhaft verbundenen Zustand aus und das Gerät kann schlafen/dozen.
+            acquireWakeLock()
             if (!isConnected) {
                 log("Watchdog: nicht verbunden – erzwinge Reconnect")
-                acquireWakeLock()           // WakeLock nach 24-h-Timeout erneuern
                 reconnectDelay = 1000L
                 reconnectHandler.removeCallbacksAndMessages(null)
                 connect()
@@ -320,7 +356,16 @@ class SmsGatewayService : Service() {
 
     private fun connect() {
         if (!running) return
+        // Nur eine Verbindung gleichzeitig: Watchdog, scheduleReconnect und
+        // NetworkCallback können connect() parallel aufrufen – ohne diesen Guard
+        // entstünden mehrere WebSockets (und serverseitig tote Doppel-Registrierungen).
+        if (connecting || isConnected) return
+        connecting = true
         reconnectHandler.removeCallbacksAndMessages(null)
+
+        // Eventuell noch offenen alten Socket hart schließen, bevor ein neuer entsteht.
+        ws?.cancel()
+        ws = null
 
         val wsUri = toWsUrl(wsUrl)
         log("Verbinde mit $wsUri?token=…")
@@ -333,6 +378,7 @@ class SmsGatewayService : Service() {
 
         ws = httpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                connecting = false
                 isConnected = true
                 lastError = null
                 reconnectDelay = 1000L
@@ -347,6 +393,7 @@ class SmsGatewayService : Service() {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                connecting = false
                 isConnected = false
                 lastError = t.message ?: "Verbindungsfehler"
                 log("✗ Verbindungsfehler: ${lastError?.take(120)}")
@@ -358,6 +405,7 @@ class SmsGatewayService : Service() {
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                connecting = false
                 isConnected = false
                 log("WebSocket geschlossen (Code $code: $reason)")
                 emitStatus()

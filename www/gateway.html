@@ -239,8 +239,9 @@
 
   <!-- Akku-Optimierung-Warnung (wird ausgeblendet sobald Optimierung deaktiviert) -->
   <div class="card card-warning" id="batteryWarning" style="display:none;">
-    <div class="card-label">Akku-Optimierung aktiv</div>
-    <p>Android kann diese App im Hintergrund beenden und die Gateway-Verbindung unterbrechen. Für zuverlässigen Dauerbetrieb bitte deaktivieren.</p>
+    <div class="card-label">⚠ Akku-Optimierung aktiv – Verbindung gefährdet</div>
+    <p><strong>Zwingend für den Dauerbetrieb:</strong> Solange die Akku-Optimierung aktiv ist, kappt Android (Doze) die Gateway-Verbindung sobald das Gerät länger ruht – SMS werden dann nicht zugestellt. Bitte jetzt deaktivieren.</p>
+    <p style="margin-top:6px;">Bei Xiaomi/MIUI, Huawei, Samsung oder OnePlus zusätzlich <strong>„Autostart"</strong> erlauben und in den App-Einstellungen <strong>„keine Akku-Einschränkungen"</strong> wählen.</p>
     <button class="btn-primary" onclick="requestBatteryOpt()">Akku-Optimierung deaktivieren</button>
   </div>
 
@@ -366,13 +367,11 @@ waitForCapacitor(async () => {
   // Service starten (falls noch nicht laufend)
   await SmsGateway.startGateway({ url, token });
 
-  // Akku-Optimierung prüfen und ggf. Warnung zeigen
-  if (SmsGateway.getBatteryOptimizationStatus) {
-    try {
-      const { ignored } = await SmsGateway.getBatteryOptimizationStatus();
-      if (!ignored) document.getElementById('batteryWarning').style.display = '';
-    } catch (_) {}
-  }
+  // Akku-Optimierung ist für den 24/7-Dauerbetrieb zwingend (sonst kappt Doze die
+  // Verbindung). Beim ersten Auftreten direkt den System-Dialog öffnen.
+  await ensureBatteryOptimizationOff(true);
+  // Bei jeder Rückkehr in den Vordergrund erneut prüfen – der Status kann sich ändern.
+  document.addEventListener('resume', () => ensureBatteryOptimizationOff(false));
 
   // App-Version & Update-Check
   checkForUpdate();
@@ -518,6 +517,26 @@ async function checkBatteryOnResume() {
   try {
     const { ignored } = await SmsGateway.getBatteryOptimizationStatus();
     if (ignored) hideBatteryWarning();
+  } catch (_) {}
+}
+
+/**
+ * Stellt sicher, dass die App von der Akku-Optimierung ausgenommen ist.
+ * Zeigt die Warnung prominent (Scroll-in-View) und öffnet beim ersten Mal pro
+ * App-Sitzung direkt den System-Dialog.
+ */
+async function ensureBatteryOptimizationOff(promptIfNeeded) {
+  if (!SmsGateway || !SmsGateway.getBatteryOptimizationStatus) return;
+  try {
+    const { ignored } = await SmsGateway.getBatteryOptimizationStatus();
+    if (ignored) { hideBatteryWarning(); return; }
+    const card = document.getElementById('batteryWarning');
+    card.style.display = '';
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (promptIfNeeded && !sessionStorage.getItem('batteryPrompted')) {
+      sessionStorage.setItem('batteryPrompted', '1');
+      await requestBatteryOpt();
+    }
   } catch (_) {}
 }
 

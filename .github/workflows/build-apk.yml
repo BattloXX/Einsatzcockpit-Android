@@ -91,7 +91,9 @@ jobs:
               # SMS-Gateway
               "android.permission.SEND_SMS",
               "android.permission.RECEIVE_BOOT_COMPLETED",
-              "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+              # specialUse statt dataSync: dataSync hat unter Android 15 ein
+              # ~6h/24h-Laufzeitlimit, das den 24/7-Gateway-Betrieb beendet.
+              "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
               "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
               # Benachrichtigungen für Foreground-Service (Android 13+)
               "android.permission.POST_NOTIFICATIONS",
