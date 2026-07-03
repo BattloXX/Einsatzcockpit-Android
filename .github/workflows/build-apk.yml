@@ -90,6 +90,7 @@ jobs:
               "android.permission.FOREGROUND_SERVICE_LOCATION",
               # SMS-Gateway
               "android.permission.SEND_SMS",
+              "android.permission.RECEIVE_SMS",
               "android.permission.RECEIVE_BOOT_COMPLETED",
               # specialUse statt dataSync: dataSync hat unter Android 15 ein
               # ~6h/24h-Laufzeitlimit, das den 24/7-Gateway-Betrieb beendet.

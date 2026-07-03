@@ -4,6 +4,11 @@
     <!-- SMS-Versand über SIM-Karte -->
     <uses-permission android:name="android.permission.SEND_SMS" />
 
+    <!-- SMS-Empfang (optional, Org-Schalter + Laufzeit-Berechtigung).
+         Wird nur bei aktivem Empfang fuer den dynamisch registrierten
+         Receiver in SmsGatewayService benoetigt (siehe updateSmsReceiver()). -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+
     <!-- Hintergrund-Service.
          specialUse statt dataSync: dataSync hat unter Android 15 (targetSdk 35) ein
          kumulatives Laufzeitlimit von ~6 h/24 h, danach beendet das System den Service

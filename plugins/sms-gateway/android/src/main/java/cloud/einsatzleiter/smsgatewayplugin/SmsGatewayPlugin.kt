@@ -1,6 +1,7 @@
 package cloud.einsatzleiter.smsgatewayplugin
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
@@ -20,10 +21,13 @@ import com.getcapacitor.annotation.PermissionCallback
  * JS-API:
  *   SmsGateway.startGateway({ url, token })
  *   SmsGateway.stopGateway()
- *   SmsGateway.getStatus() → { connected, lastError, sentCount, lastSentTo, lastSentAt }
+ *   SmsGateway.getStatus() → { connected, lastError, sentCount, lastSentTo, lastSentAt,
+ *                               receiveEnabled, receivePermissionGranted }
  *   SmsGateway.sendTestSms({ to, text })
  *   SmsGateway.checkPermission() → { granted }
  *   SmsGateway.requestPermission() → { granted }
+ *   SmsGateway.checkReceivePermission() → { granted }
+ *   SmsGateway.requestReceivePermission() → { granted }  (registriert bei Erfolg sofort den Empfangs-Receiver)
  *   SmsGateway.getBatteryOptimizationStatus() → { ignored }
  *   SmsGateway.requestBatteryOptimization() → { ignored } | { pending: true } (öffnet Systemdialog, JS prüft Status beim resume)
  *   SmsGateway.getAppVersion() → { versionName }
@@ -31,11 +35,14 @@ import com.getcapacitor.annotation.PermissionCallback
  * Events:
  *   statusChanged  → { connected, lastError, sentCount, lastSentTo, lastSentAt }
  *   smsSent        → { to (maskiert), parts, at }
+ *   smsReceived    → { from (maskiert), preview, at }
+ *   configChanged  → { receiveEnabled, receivePermissionGranted }  (Server-Config empfangen)
  */
 @CapacitorPlugin(
     name = "SmsGateway",
     permissions = [
-        Permission(alias = "sendSms", strings = [Manifest.permission.SEND_SMS])
+        Permission(alias = "sendSms", strings = [Manifest.permission.SEND_SMS]),
+        Permission(alias = "receiveSms", strings = [Manifest.permission.RECEIVE_SMS]),
     ]
 )
 class SmsGatewayPlugin : Plugin() {
@@ -90,6 +97,9 @@ class SmsGatewayPlugin : Plugin() {
             put("sentCount",  SmsGatewayService.sentCount.get())
             put("lastSentTo", SmsGatewayService.lastSentTo ?: "")
             put("lastSentAt", SmsGatewayService.lastSentAt)
+            put("receiveEnabled", context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
+                .getBoolean("el_gateway_receive_enabled", false))
+            put("receivePermissionGranted", getPermissionState("receiveSms") == PermissionState.GRANTED)
         })
     }
 
@@ -127,6 +137,41 @@ class SmsGatewayPlugin : Plugin() {
     private fun onPermissionResult(call: PluginCall) {
         val granted = getPermissionState("sendSms") == PermissionState.GRANTED
         call.resolve(JSObject().apply { put("granted", granted) })
+    }
+
+    // ── SMS-Empfangsberechtigung ──────────────────────────────────────────────
+    // Optional, nur angefordert wenn der Org-Schalter (Server-Config) aktiv ist.
+
+    @PluginMethod
+    fun checkReceivePermission(call: PluginCall) {
+        call.resolve(JSObject().apply {
+            put("granted", getPermissionState("receiveSms") == PermissionState.GRANTED)
+        })
+    }
+
+    @PluginMethod
+    fun requestReceivePermission(call: PluginCall) {
+        if (getPermissionState("receiveSms") == PermissionState.GRANTED) {
+            refreshReceiver()
+            call.resolve(JSObject().apply { put("granted", true) })
+            return
+        }
+        requestPermissionForAlias("receiveSms", call, "onReceivePermissionResult")
+    }
+
+    @PermissionCallback
+    private fun onReceivePermissionResult(call: PluginCall) {
+        val granted = getPermissionState("receiveSms") == PermissionState.GRANTED
+        if (granted) refreshReceiver()
+        call.resolve(JSObject().apply { put("granted", granted) })
+    }
+
+    /** Stoesst den Service an, den Empfangs-Receiver neu zu bewerten (nach Berechtigungsänderung). */
+    private fun refreshReceiver() {
+        val intent = Intent(context, SmsGatewayService::class.java).apply {
+            action = SmsGatewayService.ACTION_REFRESH_RECEIVER
+        }
+        context.startService(intent)
     }
 
     // ── App-Version ───────────────────────────────────────────────────────────

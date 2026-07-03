@@ -1,5 +1,6 @@
 package cloud.einsatzleiter.smsgatewayplugin
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,6 +10,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
@@ -19,6 +21,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.provider.Telephony
 import android.telephony.SmsManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -28,7 +31,9 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -36,21 +41,31 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * Foreground-Service: Hält eine persistente WebSocket-Verbindung zur Main App
  * und versendet SMS-Aufträge (sms.send) über die eingebaute SIM-Karte.
+ * Optional (Org-Schalter + Berechtigung) empfängt sie zusätzlich SMS und
+ * leitet sie an den Server weiter.
  *
  * Protokoll: identisch mit Einsatzcockpit SMS-Gateway (PROTOCOL.md)
  *   - hello → ping/pong → sms.send → SmsManager → sms.result
+ *   - config (Server→App: receive_enabled) → sms.received → sms.received.ack
  */
 class SmsGatewayService : Service() {
 
     companion object {
-        const val ACTION_START = "cloud.einsatzleiter.smsgatewayplugin.START"
-        const val ACTION_STOP  = "cloud.einsatzleiter.smsgatewayplugin.STOP"
+        const val ACTION_START            = "cloud.einsatzleiter.smsgatewayplugin.START"
+        const val ACTION_STOP             = "cloud.einsatzleiter.smsgatewayplugin.STOP"
+        const val ACTION_REFRESH_RECEIVER = "cloud.einsatzleiter.smsgatewayplugin.REFRESH_RECEIVER"
         const val EXTRA_URL    = "url"
         const val EXTRA_TOKEN  = "token"
 
         private const val NOTIF_CHANNEL_ID = "ec_sms_gateway"
         private const val NOTIF_ID         = 7301
         private const val WAKE_LOCK_TAG    = "einsatzcockpit:smsgw"
+
+        // SMS-Empfang: Server-gemeldeter Soll-Zustand (persistiert für Neustart nach Boot)
+        // und lokal gepufferte, noch nicht bestätigte Empfangs-SMS.
+        private const val PREF_RECEIVE_ENABLED = "el_gateway_receive_enabled"
+        private const val PREF_INBOX_QUEUE     = "el_gateway_inbox_queue"
+        private const val INBOX_QUEUE_MAX      = 200
 
         // ── Zustand (von Plugin abgelesen) ────────────────────────────────────
         @Volatile var isConnected = false
@@ -147,6 +162,10 @@ class SmsGatewayService : Service() {
     // Hält die CPU wach, damit Timer und WebSocket-Pings auch im Hintergrund feuern
     private var wakeLock: PowerManager.WakeLock? = null
 
+    // Dynamisch registrierter Empfangs-Receiver – nur aktiv wenn Server-Config +
+    // RECEIVE_SMS-Berechtigung beide zutreffen (siehe updateSmsReceiver()).
+    private var smsReceiver: BroadcastReceiver? = null
+
     private val notificationManager by lazy {
         getSystemService(NotificationManager::class.java)
     }
@@ -195,6 +214,8 @@ class SmsGatewayService : Service() {
         val prefs = getSharedPreferences("CapacitorStorage", MODE_PRIVATE)
         wsUrl = prefs.getString("el_gateway_url", "") ?: ""
         token = prefs.getString("el_gateway_token", "") ?: ""
+        // Empfangs-Receiver ggf. sofort wieder aktivieren (Neustart nach Boot/Kill)
+        updateSmsReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -225,6 +246,12 @@ class SmsGatewayService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
+            ACTION_REFRESH_RECEIVER -> {
+                // Vom Plugin nach Berechtigungs-Erteilung/-Entzug aufgerufen –
+                // registriert/entfernt den Empfangs-Receiver ohne den Rest neu zu starten.
+                updateSmsReceiver()
+                return START_NOT_STICKY
+            }
             null -> {
                 // System-Neustart (START_STICKY) – Konfig aus SharedPrefs
                 if (wsUrl.isNotEmpty() && token.isNotEmpty()) {
@@ -241,6 +268,7 @@ class SmsGatewayService : Service() {
                 }
             }
         }
+        updateSmsReceiver()
         return START_STICKY
     }
 
@@ -253,6 +281,8 @@ class SmsGatewayService : Service() {
         unregisterNetworkCallback()
         releaseWakeLock()
         httpClient.dispatcher.cancelAll()
+        smsReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
+        smsReceiver = null
         super.onDestroy()
     }
 
@@ -386,6 +416,8 @@ class SmsGatewayService : Service() {
                 webSocket.send("""{"type":"hello","role":"sms-gateway","version":"1.0"}""")
                 updateNotification("Verbunden ✓")
                 emitStatus()
+                // Waehrend der Trennung empfangene, noch nicht bestaetigte SMS nachsenden
+                flushInboundQueue(webSocket)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -430,6 +462,13 @@ class SmsGatewayService : Service() {
                 log("← SMS-Auftrag #${jobId.take(8)} an $to (${body.length} Zeichen)")
                 emit("smsQueued") { put("jobId", jobId) }
                 sendSmsForJob(ws, jobId, to, body)
+            }
+            "sms.received.ack" -> {
+                val id = msg.optString("id")
+                if (id.isNotEmpty()) removeFromInboundQueue(id)
+            }
+            "config" -> {
+                applyReceiveEnabled(msg.optBoolean("receive_enabled", false))
             }
         }
     }
@@ -492,6 +531,131 @@ class SmsGatewayService : Service() {
         } catch (e: Exception) {
             log("✗ SMS-Exception: ${e.message?.take(80)}")
             ws.send(buildSmsResult(jobId, false, "Exception: ${e.message}"))
+        }
+    }
+
+    // ── SMS-Empfang ───────────────────────────────────────────────────────────
+    // Optional (Org-Schalter am Server + RECEIVE_SMS-Berechtigung). Der Server
+    // teilt den Soll-Zustand per "config"-Nachricht mit; erst wenn beides zutrifft
+    // wird ein dynamischer Receiver registriert. Empfangene SMS werden lokal
+    // gepuffert und erst nach Server-Bestaetigung (sms.received.ack) verworfen –
+    // so gehen SMS bei Verbindungsabbruch nicht verloren.
+
+    /**
+     * Registriert/entfernt den Empfangs-Receiver je nach Soll-Zustand (SharedPrefs)
+     * und tatsaechlich erteilter RECEIVE_SMS-Berechtigung. Idempotent.
+     */
+    private fun updateSmsReceiver() {
+        val desired = getSharedPreferences("CapacitorStorage", MODE_PRIVATE)
+            .getBoolean(PREF_RECEIVE_ENABLED, false)
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+
+        if (desired && granted) {
+            if (smsReceiver == null) {
+                val receiver = object : BroadcastReceiver() {
+                    override fun onReceive(ctx: Context, intent: Intent) {
+                        handleSmsReceivedIntent(intent)
+                    }
+                }
+                ContextCompat.registerReceiver(
+                    this, receiver,
+                    IntentFilter("android.provider.Telephony.SMS_RECEIVED"),
+                    ContextCompat.RECEIVER_NOT_EXPORTED)
+                smsReceiver = receiver
+                log("SMS-Empfang aktiviert")
+            }
+        } else {
+            val receiver = smsReceiver
+            if (receiver != null) {
+                try { unregisterReceiver(receiver) } catch (_: Exception) {}
+                smsReceiver = null
+                log("SMS-Empfang deaktiviert")
+            }
+        }
+    }
+
+    /** Persistiert den vom Server gemeldeten Soll-Zustand und wendet ihn an. */
+    private fun applyReceiveEnabled(serverEnabled: Boolean) {
+        getSharedPreferences("CapacitorStorage", MODE_PRIVATE).edit()
+            .putBoolean(PREF_RECEIVE_ENABLED, serverEnabled).apply()
+        updateSmsReceiver()
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+        emit("configChanged") {
+            put("receiveEnabled", serverEnabled)
+            put("receivePermissionGranted", granted)
+        }
+    }
+
+    private fun handleSmsReceivedIntent(intent: Intent) {
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        if (messages.isNullOrEmpty()) return
+        val from = messages[0].originatingAddress ?: return
+        val body = messages.joinToString("") { it.messageBody ?: "" }
+        forwardReceivedSms(from, body)
+    }
+
+    private fun forwardReceivedSms(from: String, text: String) {
+        val entry = JSONObject().apply {
+            put("id", UUID.randomUUID().toString())
+            put("from", from)
+            put("text", text)
+            put("sent_at", System.currentTimeMillis())
+        }
+        enqueueInboundSms(entry)
+        log("→ SMS empfangen von ${maskNumber(from)} (${text.length} Zeichen)")
+        emit("smsReceived") {
+            put("from", maskNumber(from))
+            put("preview", text.take(60))
+            put("at", System.currentTimeMillis())
+        }
+        ws?.let { flushInboundQueue(it) }
+    }
+
+    // ── Empfangs-Warteschlange (SharedPreferences, ueberlebt Reconnect/Neustart) ──
+
+    private fun loadInboundQueue(): JSONArray {
+        val raw = getSharedPreferences("CapacitorStorage", MODE_PRIVATE)
+            .getString(PREF_INBOX_QUEUE, null) ?: return JSONArray()
+        return try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+    }
+
+    private fun saveInboundQueue(arr: JSONArray) {
+        getSharedPreferences("CapacitorStorage", MODE_PRIVATE).edit()
+            .putString(PREF_INBOX_QUEUE, arr.toString()).apply()
+    }
+
+    private fun enqueueInboundSms(entry: JSONObject) {
+        val arr = loadInboundQueue()
+        arr.put(entry)
+        // Aelteste Eintraege verwerfen wenn das Limit ueberschritten wird (Speicher begrenzen)
+        val start = maxOf(0, arr.length() - INBOX_QUEUE_MAX)
+        if (start == 0) {
+            saveInboundQueue(arr)
+        } else {
+            val trimmed = JSONArray()
+            for (i in start until arr.length()) trimmed.put(arr.get(i))
+            saveInboundQueue(trimmed)
+        }
+    }
+
+    private fun removeFromInboundQueue(id: String) {
+        val arr = loadInboundQueue()
+        val kept = JSONArray()
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            if (obj.optString("id") != id) kept.put(obj)
+        }
+        saveInboundQueue(kept)
+    }
+
+    private fun flushInboundQueue(socket: WebSocket) {
+        val arr = loadInboundQueue()
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val payload = JSONObject(obj.toString()).apply { put("type", "sms.received") }
+            socket.send(payload.toString())
         }
     }
 

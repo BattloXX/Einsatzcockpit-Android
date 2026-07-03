@@ -93,17 +93,33 @@
     }
 
     /* ── SMS-Log ─────────────────────────────────────────────────────────── */
-    #smsLog { list-style: none; display: flex; flex-direction: column; gap: 6px; }
-    #smsLog li {
+    #smsLog, #receivedLog { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    #smsLog li, #receivedLog li {
       font-size: .83rem;
       display: flex;
       align-items: center;
       gap: 8px;
     }
-    #smsLog .log-time { color: var(--muted); flex-shrink: 0; font-family: monospace; }
+    #smsLog .log-time, #receivedLog .log-time { color: var(--muted); flex-shrink: 0; font-family: monospace; }
     #smsLog .log-num  { color: var(--text); }
     #smsLog .log-ok   { color: var(--green); margin-left: auto; }
+    #receivedLog .log-num { color: var(--text); flex-shrink: 0; }
+    #receivedLog .log-preview {
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .log-empty { font-size: .85rem; color: var(--muted); text-align: center; padding: 8px 0; }
+    .badge-soft {
+      font-size: .7rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: var(--border);
+      color: var(--muted);
+    }
+    .badge-soft.on { background: rgba(34,197,94,.18); color: var(--green); }
 
     /* ── Verbindungslog ──────────────────────────────────────────────────── */
     .conn-log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -225,6 +241,25 @@
     <div class="card-label">Letzte SMS-Aufträge</div>
     <ul id="smsLog" style="overflow-y:auto;flex:1;">
       <li><div class="log-empty">Noch keine SMS versendet.</div></li>
+    </ul>
+  </div>
+
+  <!-- SMS-Empfang: Berechtigung anfordern (nur sichtbar wenn Server-seitig aktiviert) -->
+  <div class="card card-warning" id="receivePermissionCard" style="display:none;">
+    <div class="card-label">📥 SMS-Empfang aktiviert – Berechtigung fehlt</div>
+    <p>Der Server hat SMS-Empfang für diese Organisation aktiviert. Bitte die Berechtigung
+      erteilen, damit eingehende SMS erkannt und weitergeleitet werden.</p>
+    <button class="btn-primary" onclick="requestReceivePermission()">SMS-Empfang erlauben</button>
+  </div>
+
+  <!-- Empfangene SMS -->
+  <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+    <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>Empfangene SMS</span>
+      <span class="badge-soft" id="receiveStatusBadge">Empfang aus</span>
+    </div>
+    <ul id="receivedLog" style="overflow-y:auto;flex:1;">
+      <li><div class="log-empty">Noch keine SMS empfangen.</div></li>
     </ul>
   </div>
 
@@ -357,12 +392,18 @@ waitForCapacitor(async () => {
   await SmsGateway.addListener('smsSent', onSmsSent);
   await SmsGateway.addListener('smsQueued', onSmsQueued);
   await SmsGateway.addListener('logEvent', (e) => addLog(e.msg));
+  await SmsGateway.addListener('smsReceived', onSmsReceived);
+  await SmsGateway.addListener('configChanged', onConfigChanged);
 
   addLog('Verbinde mit ' + new URL(url).hostname + '…');
 
   // Aktuellen Status abrufen
   const status = await SmsGateway.getStatus();
   onStatusChanged(status);
+  onConfigChanged({
+    receiveEnabled: status.receiveEnabled,
+    receivePermissionGranted: status.receivePermissionGranted,
+  });
 
   // Service starten (falls noch nicht laufend)
   await SmsGateway.startGateway({ url, token });
@@ -394,6 +435,78 @@ function onStatusChanged(data) {
   if (sentCount != null) {
     cachedSentCount = sentCount;
     renderSentCount();
+  }
+}
+
+// ── SMS-Empfang ────────────────────────────────────────────────────────────────
+const LOG_MAX_RECEIVED = 50;
+const receivedLog = [];
+
+function onSmsReceived(data) {
+  const { from, preview, at } = data;
+  const time = new Date(at).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
+  receivedLog.unshift({ from, preview, time });
+  if (receivedLog.length > LOG_MAX_RECEIVED) receivedLog.pop();
+  renderReceivedLog();
+}
+
+function renderReceivedLog() {
+  const ul = document.getElementById('receivedLog');
+  ul.innerHTML = '';
+  if (receivedLog.length === 0) {
+    const li = document.createElement('li');
+    const div = document.createElement('div');
+    div.className = 'log-empty';
+    div.textContent = 'Noch keine SMS empfangen.';
+    li.appendChild(div);
+    ul.appendChild(li);
+    return;
+  }
+  for (const e of receivedLog) {
+    const li      = document.createElement('li');
+    const time    = document.createElement('span');
+    const num     = document.createElement('span');
+    const preview = document.createElement('span');
+    time.className = 'log-time'; time.textContent = e.time;
+    num.className  = 'log-num';  num.textContent  = e.from;
+    preview.className = 'log-preview'; preview.textContent = e.preview;
+    li.appendChild(time); li.appendChild(num); li.appendChild(preview);
+    ul.appendChild(li);
+  }
+}
+
+function onConfigChanged(data) {
+  const { receiveEnabled, receivePermissionGranted } = data;
+  const badge = document.getElementById('receiveStatusBadge');
+  const permCard = document.getElementById('receivePermissionCard');
+  if (!receiveEnabled) {
+    badge.textContent = 'Empfang aus';
+    badge.className = 'badge-soft';
+    permCard.style.display = 'none';
+  } else if (receivePermissionGranted) {
+    badge.textContent = 'Empfang aktiv';
+    badge.className = 'badge-soft on';
+    permCard.style.display = 'none';
+  } else {
+    badge.textContent = 'Berechtigung fehlt';
+    badge.className = 'badge-soft';
+    permCard.style.display = '';
+  }
+}
+
+async function requestReceivePermission() {
+  if (!SmsGateway) return;
+  try {
+    const { granted } = await SmsGateway.requestReceivePermission();
+    const status = await SmsGateway.getStatus();
+    onConfigChanged({
+      receiveEnabled: status.receiveEnabled,
+      receivePermissionGranted: status.receivePermissionGranted,
+    });
+    if (granted) toast('✓ SMS-Empfang aktiviert');
+    else toast('Berechtigung verweigert – bitte manuell in den App-Einstellungen aktivieren.', 4000);
+  } catch (e) {
+    toast('Fehler: ' + (e.message || e));
   }
 }
 
