@@ -558,10 +558,15 @@ class SmsGatewayService : Service() {
                         handleSmsReceivedIntent(intent)
                     }
                 }
+                // WICHTIG: RECEIVER_EXPORTED (nicht NOT_EXPORTED). SMS_RECEIVED wird vom
+                // SYSTEM (Telephony-Prozess, fremde UID) gesendet; mit NOT_EXPORTED würde
+                // der Broadcast ab Android 13/14 (targetSdk 34+) NIE zugestellt → kein
+                // Empfang. Sicher, da SMS_RECEIVED ein geschützter Broadcast ist (nur das
+                // System darf ihn senden, keine Fremd-App kann ihn fälschen).
                 ContextCompat.registerReceiver(
                     this, receiver,
                     IntentFilter("android.provider.Telephony.SMS_RECEIVED"),
-                    ContextCompat.RECEIVER_NOT_EXPORTED)
+                    ContextCompat.RECEIVER_EXPORTED)
                 smsReceiver = receiver
                 log("SMS-Empfang aktiviert")
             }
