@@ -4,44 +4,55 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>SMS-Gateway</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* HydroFlow-/Einsatzcockpit-Design-Tokens */
     :root {
-      --bg:       #0f172a;
-      --surface:  #1e293b;
-      --border:   #334155;
-      --text:     #f1f5f9;
-      --muted:    #94a3b8;
-      --green:    #22c55e;
-      --red:      #ef4444;
-      --yellow:   #f59e0b;
-      --blue:     #3b82f6;
+      --bg:#081425; --s0:#040e1f; --surface:#152031; --s2:#111c2d; --s-hi:#2a3548;
+      --border:#424754; --line2:#2a3548;
+      --text:#d8e3fb; --muted:#c2c6d6; --faint:#8c909f;
+      --primary:#adc6ff; --primary-c:#4d8eff;
+      --green:#7ee7a0; --red:#ffb4ab; --yellow:#ffb95f;
+      --mono:'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+      --sans:'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     }
 
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: var(--sans);
       font-size: 15px;
       min-height: 100dvh;
       display: flex;
       flex-direction: column;
       padding: 16px;
       gap: 14px;
+      -webkit-tap-highlight-color: transparent;
     }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
     /* ── Header ─────────────────────────────────────────────────────────── */
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    .header { display: flex; align-items: center; gap: 12px; }
+    .header-icon {
+      width: 42px; height: 42px; border-radius: 10px; flex-shrink: 0;
+      background: var(--primary-c); display: flex; align-items: center;
+      justify-content: center; font-size: 1.3rem;
     }
-    .header-icon { font-size: 1.8rem; }
-    .header-title { font-size: 1.2rem; font-weight: 700; }
-    .header-sub { font-size: .8rem; color: var(--muted); margin-top: 1px; }
+    .header-title { font-size: 1.2rem; font-weight: 700; color: var(--primary); line-height: 1.1; }
+    .header-sub {
+      font-family: var(--mono); font-size: .62rem; letter-spacing: .06em;
+      color: var(--faint); text-transform: uppercase; margin-top: 3px;
+    }
+    .ver-pill {
+      margin-left: auto; font-family: var(--mono); font-size: .64rem; color: var(--muted);
+      background: var(--s-hi); border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px;
+    }
 
-    /* ── Karten ──────────────────────────────────────────────────────────── */
+    /* ── Panels (glass) ──────────────────────────────────────────────────── */
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -49,166 +60,97 @@
       padding: 14px 16px;
     }
     .card-label {
-      font-size: .75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      color: var(--muted);
-      margin-bottom: 8px;
+      font-family: var(--mono); font-size: .62rem; font-weight: 500;
+      text-transform: uppercase; letter-spacing: .07em;
+      color: var(--faint); margin-bottom: 10px;
     }
 
-    /* ── Status-Badge ────────────────────────────────────────────────────── */
-    .status-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .dot {
-      width: 11px; height: 11px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      background: var(--muted);
-    }
-    .dot.connected    { background: var(--green); box-shadow: 0 0 6px var(--green); }
-    .dot.disconnected { background: var(--red);   box-shadow: 0 0 6px var(--red); }
-    .dot.connecting   { background: var(--yellow);animation: pulse 1s infinite; }
+    /* ── Status ──────────────────────────────────────────────────────────── */
+    .status-row { display: flex; align-items: center; gap: 10px; }
+    .dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; background: var(--faint); }
+    .dot.connected    { background: var(--green); box-shadow: 0 0 7px var(--green); }
+    .dot.disconnected { background: var(--red);   box-shadow: 0 0 7px var(--red); }
+    .dot.connecting   { background: var(--yellow); animation: pulse 1s infinite; }
     @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
-
-    .status-text { font-weight: 600; font-size: 1rem; }
+    .status-text { font-weight: 700; font-size: 1.05rem; }
     .status-count { margin-left: auto; font-size: .82rem; color: var(--muted); }
+    .url-row { margin-top: 10px; font-size: .82rem; color: var(--muted); overflow-wrap: break-word; }
+    .url-row span { color: var(--primary); font-family: var(--mono); font-size: .78rem; }
+    .error-row { margin-top: 8px; font-size: .8rem; color: var(--red); display: none; }
 
-    .url-row {
-      margin-top: 10px;
-      font-size: .82rem;
-      color: var(--muted);
-      overflow-wrap: break-word;
-    }
-    .url-row span { color: var(--text); font-family: monospace; }
-
-    .error-row {
-      margin-top: 8px;
-      font-size: .8rem;
-      color: var(--red);
-      display: none;
-    }
-
-    /* ── SMS-Log ─────────────────────────────────────────────────────────── */
+    /* ── Logs ────────────────────────────────────────────────────────────── */
     #smsLog, #receivedLog { list-style: none; display: flex; flex-direction: column; gap: 6px; }
-    #smsLog li, #receivedLog li {
-      font-size: .83rem;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    #smsLog .log-time, #receivedLog .log-time { color: var(--muted); flex-shrink: 0; font-family: monospace; }
+    #smsLog li, #receivedLog li { font-size: .83rem; display: flex; align-items: center; gap: 8px; }
+    #smsLog .log-time, #receivedLog .log-time { color: var(--faint); flex-shrink: 0; font-family: var(--mono); font-size: .74rem; }
     #smsLog .log-num  { color: var(--text); }
     #smsLog .log-ok   { color: var(--green); margin-left: auto; }
     #receivedLog .log-num { color: var(--text); flex-shrink: 0; }
-    #receivedLog .log-preview {
-      color: var(--muted);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .log-empty { font-size: .85rem; color: var(--muted); text-align: center; padding: 8px 0; }
+    #receivedLog .log-preview { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-empty { font-size: .85rem; color: var(--faint); text-align: center; padding: 12px 0; font-style: italic; }
+
+    /* ── Chips / Badges ──────────────────────────────────────────────────── */
     .badge-soft {
-      font-size: .7rem;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 10px;
-      background: var(--border);
-      color: var(--muted);
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: .68rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+      background: var(--s-hi); color: var(--faint); border: 1px solid var(--border);
     }
-    .badge-soft.on { background: rgba(34,197,94,.18); color: var(--green); }
+    .badge-soft::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .badge-soft.on { background: rgba(126,231,160,.14); color: var(--green); border-color: rgba(126,231,160,.4); }
 
     /* ── Verbindungslog ──────────────────────────────────────────────────── */
     .conn-log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
     .conn-log-actions { display: flex; gap: 6px; }
-    .btn-sm { font-size: .72rem !important; padding: 4px 10px !important; }
+    .btn-sm { font-size: .72rem !important; padding: 5px 11px !important; }
     #connLog {
-      background: #020617; border-radius: 8px; padding: 10px 12px;
-      font-size: .76rem; font-family: monospace; color: #94a3b8;
+      background: var(--s0); border: 1px solid var(--line2); border-radius: 8px; padding: 10px 12px;
+      font-size: .76rem; font-family: var(--mono); color: var(--muted);
       line-height: 1.65; white-space: pre-wrap; word-break: break-all;
       overflow-y: auto; max-height: 240px; min-height: 60px;
       user-select: text; -webkit-user-select: text;
     }
 
-    /* ── Test-SMS ────────────────────────────────────────────────────────── */
-    .input-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
+    /* ── Inputs / Buttons ────────────────────────────────────────────────── */
+    .input-row { display: flex; gap: 8px; align-items: center; }
     input[type="tel"] {
-      flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: .9rem;
-      padding: 9px 12px;
-      outline: none;
+      flex: 1; background: var(--s0); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font-size: .9rem; padding: 10px 12px; outline: none; font-family: var(--mono);
     }
-    input[type="tel"]:focus { border-color: var(--blue); }
-    input[type="tel"]::placeholder { color: var(--muted); }
+    input[type="tel"]:focus { border-color: var(--primary-c); }
+    input[type="tel"]::placeholder { color: var(--faint); }
 
     button {
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: .88rem;
-      font-weight: 600;
-      padding: 9px 16px;
-      transition: opacity .15s;
+      border: none; border-radius: 8px; cursor: pointer; font-family: var(--sans);
+      font-size: .88rem; font-weight: 600; padding: 10px 16px; transition: opacity .15s, filter .15s;
     }
     button:disabled { opacity: .45; cursor: default; }
-    button:active:not(:disabled) { opacity: .75; }
+    button:active:not(:disabled) { opacity: .8; }
+    .btn-primary { background: var(--primary-c); color: #00285d; font-weight: 700; }
+    .btn-ghost   { background: var(--s-hi); color: var(--text); border: 1px solid var(--border); }
+    .btn-danger  { background: rgba(255,180,171,.12); color: var(--red); border: 1px solid rgba(255,180,171,.4); }
 
-    .btn-primary  { background: var(--blue); color: #fff; }
-    .btn-ghost    { background: var(--border); color: var(--text); }
-    .btn-danger   { background: #7f1d1d; color: #fca5a5; }
-
-    /* ── Aktionen ────────────────────────────────────────────────────────── */
-    .action-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+    .action-row { display: flex; gap: 10px; flex-wrap: wrap; }
     .action-row button { flex: 1; min-width: 120px; }
 
-    /* ── Akku-Warnung ────────────────────────────────────────────────────── */
-    .card-warning { border-color: var(--yellow); }
+    /* ── Warn-Karten ─────────────────────────────────────────────────────── */
+    .card-warning { border-color: rgba(255,185,95,.5); background: rgba(255,185,95,.05); }
     .card-warning .card-label { color: var(--yellow); }
     .card-warning p { font-size: .85rem; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
 
-    /* ── App-Version ─────────────────────────────────────────────────────── */
-    .version-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: .85rem;
-      margin-top: 6px;
-    }
+    /* ── Version / Update ────────────────────────────────────────────────── */
+    .version-row { display: flex; align-items: center; gap: 8px; font-size: .85rem; margin-top: 8px; }
     .version-row:first-of-type { margin-top: 0; }
-    .version-label { color: var(--muted); min-width: 80px; }
-    .version-value { font-family: monospace; color: var(--text); }
+    .version-label { color: var(--muted); min-width: 84px; }
+    .version-value { font-family: var(--mono); color: var(--text); }
     .update-available { color: var(--yellow); }
     .up-to-date { color: var(--green); }
 
     /* ── Toast ───────────────────────────────────────────────────────────── */
     #toast {
-      position: fixed;
-      bottom: 24px;
-      left: 50%;
+      position: fixed; bottom: 24px; left: 50%;
       transform: translateX(-50%) translateY(80px);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 8px 20px;
-      font-size: .85rem;
-      transition: transform .25s ease;
-      pointer-events: none;
-      white-space: nowrap;
+      background: var(--s-hi); border: 1px solid var(--border); border-radius: 999px;
+      padding: 9px 20px; font-size: .85rem; transition: transform .25s ease;
+      pointer-events: none; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.4);
     }
     #toast.show { transform: translateX(-50%) translateY(0); }
   </style>
@@ -221,6 +163,7 @@
       <div class="header-title">SMS-Gateway</div>
       <div class="header-sub" id="headerSub">einsatzcockpit.com</div>
     </div>
+    <span class="ver-pill" id="verPill">ECPG</span>
   </div>
 
   <!-- Status -->
@@ -238,7 +181,7 @@
 
   <!-- SMS-Log -->
   <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
-    <div class="card-label">Letzte SMS-Aufträge</div>
+    <div class="card-label">📤 Letzte SMS-Aufträge</div>
     <ul id="smsLog" style="overflow-y:auto;flex:1;">
       <li><div class="log-empty">Noch keine SMS versendet.</div></li>
     </ul>
@@ -255,7 +198,7 @@
   <!-- Empfangene SMS -->
   <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
     <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
-      <span>Empfangene SMS</span>
+      <span>📥 Empfangene SMS</span>
       <span class="badge-soft" id="receiveStatusBadge">Empfang aus</span>
     </div>
     <ul id="receivedLog" style="overflow-y:auto;flex:1;">
@@ -265,7 +208,7 @@
 
   <!-- Test-SMS -->
   <div class="card">
-    <div class="card-label">Test-SMS</div>
+    <div class="card-label">✉️ Test-SMS</div>
     <div class="input-row">
       <input type="tel" id="testTo" placeholder="+43664…" autocomplete="off">
       <button class="btn-primary" id="btnSend" onclick="sendTestSms()">Senden</button>
@@ -287,7 +230,7 @@
 
   <!-- App-Version / Update -->
   <div class="card" id="updateCard">
-    <div class="card-label">App-Version</div>
+    <div class="card-label">🧩 App-Version</div>
     <div class="version-row">
       <span class="version-label">Installiert</span>
       <span class="version-value" id="installedVersion">–</span>
@@ -296,7 +239,10 @@
       <span class="version-label">Verfügbar</span>
       <span class="version-value" id="availableVersion">Prüfe…</span>
     </div>
-    <div id="updateBtnRow" style="margin-top:12px;display:none;">
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn-ghost" style="flex:1;min-width:150px;" id="btnCheckUpdate" onclick="manualUpdateCheck()">🔄 Auf Update prüfen</button>
+    </div>
+    <div id="updateBtnRow" style="margin-top:10px;display:none;">
       <button class="btn-primary" style="width:100%;" onclick="downloadApk()">⬇ Update herunterladen</button>
     </div>
   </div>
@@ -304,7 +250,7 @@
   <!-- Verbindungslog -->
   <div class="card">
     <div class="conn-log-header">
-      <div class="card-label" style="margin:0">Verbindungslog</div>
+      <div class="card-label" style="margin:0">🖥 Verbindungslog</div>
       <div class="conn-log-actions">
         <button class="btn-ghost btn-sm" onclick="copyLog()">Kopieren</button>
         <button class="btn-ghost btn-sm" onclick="downloadLog()">↓ Herunterladen</button>
@@ -683,12 +629,33 @@ async function disconnect() {
 const GITHUB_REPO = 'BattloXX/Einsatzcockpit-Android';
 let latestApkUrl = null;
 
+// Manueller Check per Button: Status zurücksetzen + erneut prüfen (mit UI-Feedback).
+async function manualUpdateCheck() {
+  const btn = document.getElementById('btnCheckUpdate');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = '⏳ Prüfe…';
+  document.getElementById('availableVersion').textContent = 'Prüfe…';
+  document.getElementById('availableVersion').className = 'version-value';
+  document.getElementById('updateBtnRow').style.display = 'none';
+  try {
+    await checkForUpdate();
+    const av = document.getElementById('availableVersion').textContent;
+    toast(av.includes('✓') ? '✓ App ist aktuell' : 'Update verfügbar: ' + av);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
 async function checkForUpdate() {
   // Installierte Version via Plugin
   if (SmsGateway && SmsGateway.getAppVersion) {
     try {
       const { versionName } = await SmsGateway.getAppVersion();
       document.getElementById('installedVersion').textContent = 'v' + versionName;
+      document.getElementById('verPill').innerHTML = 'ECPG <b style="color:var(--yellow)">v' + versionName + '</b>';
     } catch (_) {
       document.getElementById('installedVersion').textContent = 'unbekannt';
     }
@@ -724,6 +691,7 @@ async function checkForUpdate() {
     }
   } catch (_) {
     document.getElementById('availableVersion').textContent = 'Nicht abrufbar';
+    document.getElementById('availableVersion').className = 'version-value';
   }
 }
 
