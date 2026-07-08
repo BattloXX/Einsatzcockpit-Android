@@ -212,3 +212,24 @@ Neue Backend-Endpoints für diese App:
 - `POST /api/v1/device/location` — GPS-Position übermitteln
 - `POST /api/v1/device/duty` — Dienst-Status setzen
 - `GET /api/v1/device/duty-state` — Einsatz-Status abfragen (steuert Hintergrund-GPS)
+
+---
+
+## Offline-Objektdaten (Objektverwaltung, seit Backend-PR9 2026-07-05)
+
+Die App precacht **Objektinformationen inklusive PDFs** für den Einsatz ohne Netz
+(Fahrzeug im Funkloch). Der Mechanismus lebt vollständig in der Remote-PWA und
+läuft automatisch im Capacitor-WebView — **kein nativer Code nötig**:
+
+- `objekt_offline_sync.js` (Backend, wird nur geladen wenn das Objekt-Modul aktiv
+  ist) erkennt die App über `window.Capacitor.getPlatform() === 'android'` und
+  synchronisiert 90 s nach dem Start sowie alle 6 Stunden.
+- Quelle: `GET /api/objekte/sync` (Session-Auth der WebView) — Manifest aller
+  **freigegebenen** Objekte mit Einsatzansicht-URL, Thumbnails, Hi-Res-Seiten
+  und Einzel-PDFs. Gelöschte/zurückgezogene Inhalte werden aus dem Cache geräumt.
+- Ablage im Cache-Storage `ec-objekt-v1`; der Service Worker (`sw.js`) bedient
+  `/objekt-medien/*` cache-first und `/objekte/<id>/einsatz` als Offline-Fallback.
+- Im normalen Browser läuft **kein** Voll-Precaching (Datenvolumen) — dort cacht
+  der Service Worker nur besuchte Seiten.
+
+Manuell auslösbar in der WebView-Konsole: `window.objektOfflineSync()`.
