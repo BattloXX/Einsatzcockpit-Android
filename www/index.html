@@ -92,10 +92,29 @@ waitForCapacitor(async () => {
   // speichern. Stattdessen leitet sie mit dem frischen Token als Query-Param
   // hierher zurück (lokale Seite, garantierter Bridge-Zugriff), wo er jetzt
   // zuverlässig abgelegt wird.
-  const pinToken = new URLSearchParams(window.location.search).get('pin_device_token');
+  const pinParams = new URLSearchParams(window.location.search);
+  const pinToken = pinParams.get('pin_device_token');
   if (pinToken) {
     setStatus('Anmelden…');
     await Preferences.set({ key: 'el_device_token', value: pinToken });
+
+    // Kombiniertes Geraet (Board + SMS-Gateway) per PIN gekoppelt: nur vorhanden,
+    // wenn das Geraet auch als SMS-Gateway angelegt wurde (siehe geraet_login_pin_done.html).
+    const pinGatewayToken = pinParams.get('pin_gateway_token');
+    if (pinGatewayToken) {
+      const gwBaseUrl = 'https://einsatzcockpit.com';
+      await Preferences.set({ key: 'el_gateway_url',   value: gwBaseUrl });
+      await Preferences.set({ key: 'el_gateway_token', value: pinGatewayToken });
+      if (SmsGateway) {
+        const { granted } = await SmsGateway.requestPermission();
+        if (!granted) {
+          showError('SMS-Berechtigung verweigert – bitte manuell in den App-Einstellungen aktivieren.');
+        }
+        await SmsGateway.startGateway({ url: gwBaseUrl, token: pinGatewayToken });
+        await ensureBatteryOptimizationOff(SmsGateway);
+      }
+    }
+
     const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
     if (DevKA) { try { await DevKA.startKeepalive(); } catch (_) {} }
     window.location.replace(
@@ -172,8 +191,8 @@ async function ensureBatteryOptimizationOff(SmsGateway) {
 
 // ── Alternativen zum QR-Scan ─────────────────────────────────────────────────
 // Geräte-Pairing per PIN (kein Kamerazugriff nötig) – die Bestätigungsseite
-// liefert bei Erfolg selbst einen neuen Geräte-Token zurück und speichert ihn
-// per native-bridge.js in den Capacitor-Preferences (siehe geraet_login_pin.html).
+// leitet bei Erfolg mit dem frischen Token (+ optional Gateway-Token bei
+// kombiniertem Geraet) hierher zurück, siehe pin_device_token-Handling oben.
 function openPinPairing() {
   window.location.replace('https://einsatzcockpit.com/geraet-login-pin?native=1');
 }

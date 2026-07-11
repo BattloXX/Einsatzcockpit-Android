@@ -84,6 +84,7 @@
     }
     .badge-soft::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
     .badge-soft.on { background: rgba(126,231,160,.14); color: var(--green); border-color: rgba(126,231,160,.4); }
+    .badge-soft.off { background: rgba(255,180,171,.14); color: var(--red); border-color: rgba(255,180,171,.4); }
 
     /* ── Toast ───────────────────────────────────────────────────────────── */
     #toast {
@@ -129,7 +130,7 @@
   <div class="card" id="gatewayCard" style="display:none;">
     <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
       <span>📡 SMS-Gateway</span>
-      <span class="badge-soft on">konfiguriert</span>
+      <span class="badge-soft" id="gatewayStatusBadge">Prüfe…</span>
     </div>
     <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
       Dieses Gerät ist als SMS-Gateway eingerichtet und sendet/empfängt im Hintergrund SMS.
@@ -167,10 +168,28 @@ waitForCapacitor(async () => {
   const { value: gwToken } = await Preferences.get({ key: 'el_gateway_token' });
   if (gwUrl && gwToken) {
     document.getElementById('gatewayCard').style.display = '';
+    updateGatewayStatus();
   }
 
   checkForUpdate();
 });
+
+// ── Live-Verbindungsstatus des SMS-Gateways (identische Quelle wie gateway.html:
+// SmsGatewayService.isConnected im nativen Plugin, kein Netzwerk-Roundtrip). ──
+async function updateGatewayStatus() {
+  const badge = document.getElementById('gatewayStatusBadge');
+  if (!SmsGateway || !SmsGateway.getStatus) {
+    badge.textContent = 'unbekannt';
+    return;
+  }
+  try {
+    const { connected } = await SmsGateway.getStatus();
+    badge.textContent = connected ? 'Verbunden' : 'Getrennt';
+    badge.className = 'badge-soft ' + (connected ? 'on' : 'off');
+  } catch (_) {
+    badge.textContent = 'unbekannt';
+  }
+}
 
 function goBack() {
   // Kommt der Nutzer von der Web-App (Board), zurueck dorthin navigieren;
