@@ -119,7 +119,22 @@ waitForCapacitor(async () => {
     return;
   }
 
-  // Kein Token → QR-Scanner anzeigen (+ Alternativen: PIN, Account-Login)
+  // Kein Geraete-/Gateway-Token gespeichert. Falls der Nutzer aber frueher schon
+  // einmal "Mit Account anmelden" genutzt hat, liegt evtl. noch eine gueltige
+  // Web-Session (Cookie) im WebView-Cookiespeicher. Statt jedes Mal erneut den
+  // Setup-Screen zu zeigen, still zur Startseite navigieren – SameSite=Lax-Cookies
+  // werden bei einer echten Top-Level-Navigation immer mitgeschickt; der Server
+  // zeigt bei ungueltiger/abgelaufener Session ohnehin korrekt /login an
+  // (Nutzer-Feedback 2026-07-11: Login-Screen soll nicht erneut erscheinen).
+  const { value: usedAccountLogin } = await Preferences.get({ key: 'el_used_account_login' });
+  if (usedAccountLogin) {
+    setStatus('Anmelden…');
+    window.location.replace('https://einsatzcockpit.com/');
+    return;
+  }
+
+  // Kein Token, keine bekannte Account-Session → QR-Scanner anzeigen
+  // (+ Alternativen: PIN, Account-Login)
   setStatus('Anmeldung erforderlich');
   document.getElementById('spinner').style.display = 'none';
   document.getElementById('setupCard').style.display = '';
@@ -146,8 +161,14 @@ function openPinPairing() {
 }
 
 // Persönlicher Account (Benutzername/Passwort) – normale Web-Session statt
-// Geräte-Token, hält bis zu 30 Tage bei aktivem "Angemeldet bleiben".
-function openAccountLogin() {
+// Geräte-Token, hält bis zu 30 Tage bei aktivem "Angemeldet bleiben". Merkt sich,
+// dass dieser Weg schon einmal genutzt wurde, damit der Setup-Screen bei einer
+// noch gültigen Session beim nächsten App-Start übersprungen werden kann.
+async function openAccountLogin() {
+  try {
+    const { Preferences } = window.Capacitor.Plugins;
+    await Preferences.set({ key: 'el_used_account_login', value: '1' });
+  } catch (_) { /* Merken ist best-effort, Login funktioniert trotzdem */ }
   window.location.replace('https://einsatzcockpit.com/login');
 }
 
