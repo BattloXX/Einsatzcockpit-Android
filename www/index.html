@@ -85,21 +85,24 @@ function waitForCapacitor(cb, timeout = 3000) {
 waitForCapacitor(async () => {
   const { Preferences, SmsGateway } = window.Capacitor.Plugins;
 
-  // 1. Gateway-Modus prüfen
-  const { value: gwUrl }   = await Preferences.get({ key: 'el_gateway_url' });
-  const { value: gwToken } = await Preferences.get({ key: 'el_gateway_token' });
-  if (gwUrl && gwToken) {
+  // Beide Rollen sind unabhängig voneinander möglich (kombiniertes Gerät):
+  // Gateway läuft immer headless im Hintergrund, das Board ist – falls vorhanden –
+  // die Hauptansicht. Nur ohne Geräte-Token bleibt gateway.html die Ansicht.
+  const { value: gwUrl }       = await Preferences.get({ key: 'el_gateway_url' });
+  const { value: gwToken }     = await Preferences.get({ key: 'el_gateway_token' });
+  const { value: deviceToken } = await Preferences.get({ key: 'el_device_token' });
+  const hasGateway = !!(gwUrl && gwToken);
+  const hasDevice  = !!deviceToken;
+
+  if (hasGateway) {
     setStatus('SMS-Gateway startet…');
     if (SmsGateway) {
       await SmsGateway.startGateway({ url: gwUrl, token: gwToken });
+      await ensureBatteryOptimizationOff(SmsGateway);
     }
-    window.location.replace('gateway.html');
-    return;
   }
 
-  // 2. Einheit-Gerät: gespeicherten Device-Token prüfen
-  const { value: deviceToken } = await Preferences.get({ key: 'el_device_token' });
-  if (deviceToken) {
+  if (hasDevice) {
     setStatus('Anmelden…');
     // ForegroundService starten – App-Prozess bleibt im Hintergrund am Leben,
     // auch wenn der Bildschirm ausgeht (Bildschirm darf ausgehen, App nicht)
@@ -110,11 +113,29 @@ waitForCapacitor(async () => {
     return;
   }
 
-  // 3. Kein Token → QR-Scanner anzeigen (+ Alternativen: PIN, Account-Login)
+  if (hasGateway) {
+    // Reiner Gateway-Modus (kein Board-Login vorhanden) – lokale Statusseite zeigen.
+    window.location.replace('gateway.html');
+    return;
+  }
+
+  // Kein Token → QR-Scanner anzeigen (+ Alternativen: PIN, Account-Login)
   setStatus('Anmeldung erforderlich');
   document.getElementById('spinner').style.display = 'none';
   document.getElementById('setupCard').style.display = '';
 });
+
+// Akku-Optimierung nur einmalig anfragen (nicht bei jedem Start prompten), damit der
+// Gateway-Dienst zuverlässig im Hintergrund weiterläuft.
+async function ensureBatteryOptimizationOff(SmsGateway) {
+  try {
+    if (!SmsGateway.getBatteryOptimizationStatus) return;
+    const { ignored } = await SmsGateway.getBatteryOptimizationStatus();
+    if (!ignored) {
+      await SmsGateway.requestBatteryOptimization();
+    }
+  } catch (_) { /* Methode optional / Fehler ignorieren, Gateway läuft trotzdem */ }
+}
 
 // ── Alternativen zum QR-Scan ─────────────────────────────────────────────────
 // Geräte-Pairing per PIN (kein Kamerazugriff nötig) – die Bestätigungsseite
@@ -186,12 +207,36 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
     return;
   }
 
-  const token = parsed.searchParams.get('token');
-  const mode  = parsed.searchParams.get('mode');
+  const token       = parsed.searchParams.get('token');
+  const mode        = parsed.searchParams.get('mode');
+  const gatewayTok  = parsed.searchParams.get('gateway_token');
 
   if (!token) { showError('QR-Code enthält kein Token.'); return; }
 
-  if (mode === 'sms-gateway') {
+  if (mode === 'unit+sms-gateway') {
+    // ── Kombiniertes Gerät: Board-Login UND SMS-Gateway in einem Scan ───────
+    if (!gatewayTok) { showError('QR-Code enthält kein Gateway-Token.'); return; }
+    const baseUrl = parsed.origin;
+    setStatus('Gerät + SMS-Gateway koppeln…');
+
+    await Preferences.set({ key: 'el_gateway_url',   value: baseUrl });
+    await Preferences.set({ key: 'el_gateway_token', value: gatewayTok });
+    await Preferences.set({ key: 'el_device_token',  value: token });
+
+    if (SmsGateway) {
+      const { granted } = await SmsGateway.requestPermission();
+      if (!granted) {
+        showError('SMS-Berechtigung verweigert – bitte manuell in den App-Einstellungen aktivieren.');
+        // Trotzdem fortfahren; Gateway startet headless, SMS schlägt fehl bis berechtigt
+      }
+      await SmsGateway.startGateway({ url: baseUrl, token: gatewayTok });
+      await ensureBatteryOptimizationOff(SmsGateway);
+    }
+    // Board ist die Hauptansicht; Gateway läuft ab jetzt im Hintergrund weiter.
+    setStatus('Anmelden…');
+    window.location.replace(`${baseUrl}/geraet-login?token=${encodeURIComponent(token)}`);
+
+  } else if (mode === 'sms-gateway') {
     // ── Gateway-Modus ──────────────────────────────────────────────────────
     const baseUrl = parsed.origin;
     setStatus('SMS-Gateway konfigurieren…');
