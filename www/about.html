@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Über die App</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* HydroFlow-/Einsatzcockpit-Design-Tokens (identisch zu gateway.html) */
+    :root {
+      --bg:#081425; --s0:#040e1f; --surface:#152031; --s2:#111c2d; --s-hi:#2a3548;
+      --border:#424754; --line2:#2a3548;
+      --text:#d8e3fb; --muted:#c2c6d6; --faint:#8c909f;
+      --primary:#adc6ff; --primary-c:#4d8eff;
+      --green:#7ee7a0; --red:#ffb4ab; --yellow:#ffb95f;
+      --mono:'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+      --sans:'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 15px;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 14px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    .header { display: flex; align-items: center; gap: 12px; }
+    .header-logo { width: 42px; height: 42px; border-radius: 10px; flex-shrink: 0; object-fit: contain; }
+    .header-title { font-size: 1.2rem; font-weight: 700; color: var(--primary); line-height: 1.1; }
+    .header-sub {
+      font-family: var(--mono); font-size: .62rem; letter-spacing: .06em;
+      color: var(--faint); text-transform: uppercase; margin-top: 3px;
+    }
+
+    /* ── Panels (glass) ──────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .card-label {
+      font-family: var(--mono); font-size: .62rem; font-weight: 500;
+      text-transform: uppercase; letter-spacing: .07em;
+      color: var(--faint); margin-bottom: 10px;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────────────── */
+    button, a.btn {
+      border: none; border-radius: 8px; cursor: pointer; font-family: var(--sans);
+      font-size: .88rem; font-weight: 600; padding: 10px 16px; transition: opacity .15s, filter .15s;
+      text-align: center; text-decoration: none; display: inline-block;
+    }
+    button:disabled { opacity: .45; cursor: default; }
+    button:active:not(:disabled), a.btn:active { opacity: .8; }
+    .btn-primary { background: var(--primary-c); color: #00285d; font-weight: 700; }
+    .btn-ghost   { background: var(--s-hi); color: var(--text); border: 1px solid var(--border); }
+
+    /* ── Version / Update ────────────────────────────────────────────────── */
+    .version-row { display: flex; align-items: center; gap: 8px; font-size: .85rem; margin-top: 8px; }
+    .version-row:first-of-type { margin-top: 0; }
+    .version-label { color: var(--muted); min-width: 84px; }
+    .version-value { font-family: var(--mono); color: var(--text); }
+    .update-available { color: var(--yellow); }
+    .up-to-date { color: var(--green); }
+
+    /* ── Gateway-Status ──────────────────────────────────────────────────── */
+    .badge-soft {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: .68rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+      background: var(--s-hi); color: var(--faint); border: 1px solid var(--border);
+    }
+    .badge-soft::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .badge-soft.on { background: rgba(126,231,160,.14); color: var(--green); border-color: rgba(126,231,160,.4); }
+
+    /* ── Toast ───────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--s-hi); border: 1px solid var(--border); border-radius: 999px;
+      padding: 9px 20px; font-size: .85rem; transition: transform .25s ease;
+      pointer-events: none; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <img class="header-logo" src="logo.png" alt="Einsatzcockpit">
+    <div>
+      <div class="header-title">Über die App</div>
+      <div class="header-sub">Einsatzcockpit Android</div>
+    </div>
+  </div>
+
+  <!-- App-Version / Update -->
+  <div class="card">
+    <div class="card-label">🧩 App-Version</div>
+    <div class="version-row">
+      <span class="version-label">Installiert</span>
+      <span class="version-value" id="installedVersion">–</span>
+    </div>
+    <div class="version-row">
+      <span class="version-label">Verfügbar</span>
+      <span class="version-value" id="availableVersion">Prüfe…</span>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn-ghost" style="flex:1;min-width:150px;" id="btnCheckUpdate" onclick="manualUpdateCheck()">🔄 Auf Update prüfen</button>
+    </div>
+    <div id="updateBtnRow" style="margin-top:10px;display:none;">
+      <button class="btn-primary" style="width:100%;" onclick="downloadApk()">⬇ Update herunterladen</button>
+    </div>
+  </div>
+
+  <!-- SMS-Gateway (nur sichtbar wenn dieses Geraet als Gateway konfiguriert ist) -->
+  <div class="card" id="gatewayCard" style="display:none;">
+    <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>📡 SMS-Gateway</span>
+      <span class="badge-soft on">konfiguriert</span>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+      Dieses Gerät ist als SMS-Gateway eingerichtet und sendet/empfängt im Hintergrund SMS.
+    </p>
+    <div style="margin-top:10px;">
+      <button class="btn-primary" style="width:100%;" onclick="window.location.href='gateway.html'">📡 Zum SMS-Gateway-Status</button>
+    </div>
+  </div>
+
+  <!-- Zurueck -->
+  <button class="btn-ghost" onclick="goBack()">← Zurück</button>
+
+  <div id="toast"></div>
+
+<script>
+// ── Capacitor-Bridge ──────────────────────────────────────────────────────────
+function waitForCapacitor(cb) {
+  if (window.Capacitor && window.Capacitor.Plugins) {
+    cb();
+  } else {
+    document.addEventListener('deviceready', cb, { once: true });
+    setTimeout(() => { if (window.Capacitor) cb(); }, 500);
+  }
+}
+
+let SmsGateway;
+
+waitForCapacitor(async () => {
+  const { Preferences } = window.Capacitor.Plugins;
+  SmsGateway = window.Capacitor.Plugins.SmsGateway;
+
+  // Gateway-Karte nur zeigen wenn dieses Geraet als Gateway konfiguriert ist
+  // (Einheit-Geraet oder kombiniertes Geraet mit Gateway-Rolle).
+  const { value: gwUrl }   = await Preferences.get({ key: 'el_gateway_url' });
+  const { value: gwToken } = await Preferences.get({ key: 'el_gateway_token' });
+  if (gwUrl && gwToken) {
+    document.getElementById('gatewayCard').style.display = '';
+  }
+
+  checkForUpdate();
+});
+
+function goBack() {
+  // Kommt der Nutzer von der Web-App (Board), zurueck dorthin navigieren;
+  // ansonsten (z.B. direkt aus dem Setup) zur Startseite der App.
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    window.location.replace('index.html');
+  }
+}
+
+// ── App-Update-Check (identische Logik wie gateway.html) ─────────────────────
+const GITHUB_REPO = 'BattloXX/Einsatzcockpit-Android';
+let latestApkUrl = null;
+
+async function manualUpdateCheck() {
+  const btn = document.getElementById('btnCheckUpdate');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = '⏳ Prüfe…';
+  document.getElementById('availableVersion').textContent = 'Prüfe…';
+  document.getElementById('availableVersion').className = 'version-value';
+  document.getElementById('updateBtnRow').style.display = 'none';
+  try {
+    await checkForUpdate();
+    const av = document.getElementById('availableVersion').textContent;
+    toast(av.includes('✓') ? '✓ App ist aktuell' : 'Update verfügbar: ' + av);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+async function checkForUpdate() {
+  // Installierte Version via Plugin (getAppVersion ist unabhaengig vom
+  // Gateway-Verbindungsstatus - liest nur die lokale PackageInfo).
+  if (SmsGateway && SmsGateway.getAppVersion) {
+    try {
+      const { versionName } = await SmsGateway.getAppVersion();
+      document.getElementById('installedVersion').textContent = 'v' + versionName;
+    } catch (_) {
+      document.getElementById('installedVersion').textContent = 'unbekannt';
+    }
+  }
+
+  // Neueste Release von GitHub
+  try {
+    const res = await fetch(
+      'https://api.github.com/repos/' + GITHUB_REPO + '/releases/latest',
+      { headers: { Accept: 'application/vnd.github+json' } }
+    );
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rel = await res.json();
+    const latestTag = rel.tag_name || '–';
+
+    const asset = (rel.assets || []).find(a => a.name.endsWith('.apk'));
+    if (asset) latestApkUrl = asset.browser_download_url;
+
+    const installedEl = document.getElementById('installedVersion');
+    const availableEl = document.getElementById('availableVersion');
+
+    const installedVer = installedEl.textContent.replace(/^v/, '');
+    const latestVer    = latestTag.replace(/^v/, '');
+
+    if (latestVer && installedVer !== '–' && installedVer !== 'unbekannt' && latestVer !== installedVer) {
+      availableEl.textContent = latestTag;
+      availableEl.className = 'version-value update-available';
+      document.getElementById('updateBtnRow').style.display = '';
+    } else {
+      availableEl.textContent = latestTag + ' ✓';
+      availableEl.className = 'version-value up-to-date';
+    }
+  } catch (_) {
+    document.getElementById('availableVersion').textContent = 'Nicht abrufbar';
+    document.getElementById('availableVersion').className = 'version-value';
+  }
+}
+
+function downloadApk() {
+  if (latestApkUrl) window.open(latestApkUrl, '_system');
+  else toast('Kein Download-Link verfügbar');
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, ms = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), ms);
+}
+</script>
+</body>
+</html>
