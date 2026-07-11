@@ -18,8 +18,7 @@
       align-items: center; justify-content: center;
       padding: 32px 24px; gap: 24px; text-align: center;
     }
-    .logo { font-size: 3rem; }
-    h1 { font-size: 1.4rem; font-weight: 700; }
+    .logo { width: 140px; height: 140px; object-fit: contain; }
     .sub { font-size: .9rem; color: var(--muted); }
     .card {
       background: var(--surface); border: 1px solid var(--border);
@@ -48,22 +47,19 @@
   </style>
 </head>
 <body>
-  <div class="logo">🚒</div>
-  <div>
-    <h1>Einsatzcockpit</h1>
-    <div class="sub" id="statusLine">Startet…</div>
-  </div>
+  <img class="logo" src="logo.png" alt="Einsatzcockpit">
+  <div class="sub" id="statusLine">Startet…</div>
   <div class="spinner" id="spinner"></div>
 
   <!-- Erster Start / kein Token -->
   <div class="card" id="setupCard" style="display:none;">
-    <h2>🔲 QR-Code scannen</h2>
+    <h2>👤 Mit Account anmelden</h2>
+    <p>Persönlicher Account (Benutzername/Passwort)</p>
+    <button onclick="openAccountLogin()">Mit Account anmelden</button>
+    <div class="divider"><span>oder Geräte-Login</span></div>
     <p>Scanne den QR-Code aus dem Admin-Bereich<br>(Admin → Geräte-Login → + Gerät registrieren)</p>
-    <button onclick="startScan()">QR-Code scannen</button>
+    <button class="btn-secondary" id="scanBtn" onclick="startScan()">QR-Code scannen</button>
     <button class="btn-secondary" onclick="openPinPairing()">PIN eingeben statt scannen</button>
-    <div class="divider"><span>oder</span></div>
-    <p>Persönlicher Account (Benutzername/Passwort):</p>
-    <button class="btn-secondary" onclick="openAccountLogin()">Mit Account anmelden</button>
   </div>
 
   <div id="error"></div>
@@ -149,7 +145,7 @@ async function startScan() {
   }
 
   setStatus('QR-Scanner öffnet…');
-  document.getElementById('setupCard').querySelector('button').disabled = true;
+  document.getElementById('scanBtn').disabled = true;
 
   try {
     // Google Barcode Scanner Module prüfen/installieren
@@ -174,7 +170,7 @@ async function startScan() {
     await handleQrResult(barcodes[0].rawValue, Preferences, SmsGateway);
   } catch (e) {
     showError('Scan-Fehler: ' + (e.message || e));
-    document.getElementById('setupCard').querySelector('button').disabled = false;
+    document.getElementById('scanBtn').disabled = false;
   }
 }
 
@@ -228,7 +224,7 @@ function showError(msg) {
   const el = document.getElementById('error');
   el.textContent = msg;
   el.style.display = '';
-  document.getElementById('setupCard').querySelector('button').disabled = false;
+  document.getElementById('scanBtn').disabled = false;
 }
 </script>
 </body>
