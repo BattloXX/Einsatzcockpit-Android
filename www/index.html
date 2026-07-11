@@ -85,6 +85,24 @@ function waitForCapacitor(cb, timeout = 3000) {
 waitForCapacitor(async () => {
   const { Preferences, SmsGateway } = window.Capacitor.Plugins;
 
+  // Rückkehr von der PIN-Pairing-Bestätigungsseite (geraet-login-pin): Capacitor
+  // injiziert seine JS-Bruecke nicht zuverlässig in extern nachgeladene Seiten
+  // (server.allowNavigation, bekannte Capacitor-Einschränkung) — die
+  // Bestätigungsseite kann den Token deshalb nicht selbst per Preferences
+  // speichern. Stattdessen leitet sie mit dem frischen Token als Query-Param
+  // hierher zurück (lokale Seite, garantierter Bridge-Zugriff), wo er jetzt
+  // zuverlässig abgelegt wird.
+  const pinToken = new URLSearchParams(window.location.search).get('pin_device_token');
+  if (pinToken) {
+    setStatus('Anmelden…');
+    await Preferences.set({ key: 'el_device_token', value: pinToken });
+    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (DevKA) { try { await DevKA.startKeepalive(); } catch (_) {} }
+    window.location.replace(
+      'https://einsatzcockpit.com/geraet-login?token=' + encodeURIComponent(pinToken) + '&native=1');
+    return;
+  }
+
   // Beide Rollen sind unabhängig voneinander möglich (kombiniertes Gerät):
   // Gateway läuft immer headless im Hintergrund, das Board ist – falls vorhanden –
   // die Hauptansicht. Nur ohne Geräte-Token bleibt gateway.html die Ansicht.
@@ -109,7 +127,7 @@ waitForCapacitor(async () => {
     const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
     if (DevKA) { try { await DevKA.startKeepalive(); } catch (_) {} }
     window.location.replace(
-      'https://einsatzcockpit.com/geraet-login?token=' + encodeURIComponent(deviceToken));
+      'https://einsatzcockpit.com/geraet-login?token=' + encodeURIComponent(deviceToken) + '&native=1');
     return;
   }
 
@@ -129,7 +147,7 @@ waitForCapacitor(async () => {
   const { value: usedAccountLogin } = await Preferences.get({ key: 'el_used_account_login' });
   if (usedAccountLogin) {
     setStatus('Anmelden…');
-    window.location.replace('https://einsatzcockpit.com/');
+    window.location.replace('https://einsatzcockpit.com/?native=1');
     return;
   }
 
@@ -157,7 +175,7 @@ async function ensureBatteryOptimizationOff(SmsGateway) {
 // liefert bei Erfolg selbst einen neuen Geräte-Token zurück und speichert ihn
 // per native-bridge.js in den Capacitor-Preferences (siehe geraet_login_pin.html).
 function openPinPairing() {
-  window.location.replace('https://einsatzcockpit.com/geraet-login-pin');
+  window.location.replace('https://einsatzcockpit.com/geraet-login-pin?native=1');
 }
 
 // Persönlicher Account (Benutzername/Passwort) – normale Web-Session statt
@@ -169,7 +187,7 @@ async function openAccountLogin() {
     const { Preferences } = window.Capacitor.Plugins;
     await Preferences.set({ key: 'el_used_account_login', value: '1' });
   } catch (_) { /* Merken ist best-effort, Login funktioniert trotzdem */ }
-  window.location.replace('https://einsatzcockpit.com/login');
+  window.location.replace('https://einsatzcockpit.com/login?native=1');
 }
 
 function setStatus(msg) {
@@ -255,7 +273,7 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
     }
     // Board ist die Hauptansicht; Gateway läuft ab jetzt im Hintergrund weiter.
     setStatus('Anmelden…');
-    window.location.replace(`${baseUrl}/geraet-login?token=${encodeURIComponent(token)}`);
+    window.location.replace(`${baseUrl}/geraet-login?token=${encodeURIComponent(token)}&native=1`);
 
   } else if (mode === 'sms-gateway') {
     // ── Gateway-Modus ──────────────────────────────────────────────────────
@@ -281,7 +299,7 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
     setStatus('Anmelden…');
     await Preferences.set({ key: 'el_device_token', value: token });
     window.location.replace(
-      `${parsed.origin}/geraet-login?token=${encodeURIComponent(token)}`);
+      `${parsed.origin}/geraet-login?token=${encodeURIComponent(token)}&native=1`);
   }
 }
 
