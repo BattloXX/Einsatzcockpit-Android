@@ -35,6 +35,9 @@
     }
     button:active { opacity: .75; }
     button:disabled { opacity: .45; cursor: default; }
+    button.btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .divider { display: flex; align-items: center; gap: 10px; margin: 18px 0 8px; color: var(--muted); font-size: .8rem; }
+    .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
     .spinner {
       width: 36px; height: 36px; border: 3px solid var(--border);
       border-top-color: var(--blue); border-radius: 50%;
@@ -57,6 +60,10 @@
     <h2>🔲 QR-Code scannen</h2>
     <p>Scanne den QR-Code aus dem Admin-Bereich<br>(Admin → Geräte-Login → + Gerät registrieren)</p>
     <button onclick="startScan()">QR-Code scannen</button>
+    <button class="btn-secondary" onclick="openPinPairing()">PIN eingeben statt scannen</button>
+    <div class="divider"><span>oder</span></div>
+    <p>Persönlicher Account (Benutzername/Passwort):</p>
+    <button class="btn-secondary" onclick="openAccountLogin()">Mit Account anmelden</button>
   </div>
 
   <div id="error"></div>
@@ -107,11 +114,25 @@ waitForCapacitor(async () => {
     return;
   }
 
-  // 3. Kein Token → QR-Scanner anzeigen
-  setStatus('QR-Code benötigt');
+  // 3. Kein Token → QR-Scanner anzeigen (+ Alternativen: PIN, Account-Login)
+  setStatus('Anmeldung erforderlich');
   document.getElementById('spinner').style.display = 'none';
   document.getElementById('setupCard').style.display = '';
 });
+
+// ── Alternativen zum QR-Scan ─────────────────────────────────────────────────
+// Geräte-Pairing per PIN (kein Kamerazugriff nötig) – die Bestätigungsseite
+// liefert bei Erfolg selbst einen neuen Geräte-Token zurück und speichert ihn
+// per native-bridge.js in den Capacitor-Preferences (siehe geraet_login_pin.html).
+function openPinPairing() {
+  window.location.replace('https://einsatzcockpit.com/geraet-login-pin');
+}
+
+// Persönlicher Account (Benutzername/Passwort) – normale Web-Session statt
+// Geräte-Token, hält bis zu 30 Tage bei aktivem "Angemeldet bleiben".
+function openAccountLogin() {
+  window.location.replace('https://einsatzcockpit.com/login');
+}
 
 function setStatus(msg) {
   document.getElementById('statusLine').textContent = msg;
