@@ -42,7 +42,15 @@ jobs:
 
       - name: Patch Version in build.gradle
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          # Bei Tag-Builds (v*) kommt die versionName direkt aus dem Git-Tag,
+          # damit APK-Version und GitHub-Release immer übereinstimmen (sonst
+          # muss package.json bei jedem Tag manuell nachgezogen werden, was
+          # den In-App-Update-Check dauerhaft "Update verfügbar" melden lässt).
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
           VERSION_CODE=${{ github.run_number }}
           sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" android/app/build.gradle
           sed -i 's/versionName "[^"]*"/versionName "'"$VERSION"'"/' android/app/build.gradle
