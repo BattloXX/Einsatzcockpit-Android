@@ -55,6 +55,7 @@ jobs:
           sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" android/app/build.gradle
           sed -i 's/versionName "[^"]*"/versionName "'"$VERSION"'"/' android/app/build.gradle
           echo "versionName=$VERSION, versionCode=$VERSION_CODE"
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Generate app icons from Logo-rot.png
         run: |
@@ -174,20 +175,36 @@ jobs:
             android/app/build/outputs/apk/release/app-release-unsigned.apk
           rm -f /tmp/keystore.jks
 
+      - name: APK-Dateien mit Versionsnummer benennen
+        run: |
+          # Damit sowohl der Workflow-Artifact als auch der GitHub-Release-Anhang
+          # die Versionsnummer im Dateinamen tragen (z.B. beim direkten Download
+          # von der Releases-Seite erkennbar, ohne die Release-Beschreibung zu lesen).
+          cd android/app/build/outputs/apk
+          if [ -f release/app-release-signed.apk ]; then
+            cp release/app-release-signed.apk "release/einsatzcockpit-v${APP_VERSION}.apk"
+          fi
+          if [ -f release/app-release-unsigned.apk ]; then
+            cp release/app-release-unsigned.apk "release/einsatzcockpit-v${APP_VERSION}-unsigned.apk"
+          fi
+          if [ -f debug/app-debug.apk ]; then
+            cp debug/app-debug.apk "debug/einsatzcockpit-v${APP_VERSION}-debug.apk"
+          fi
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: einsatzcockpit.apk
+          name: einsatzcockpit-v${{ env.APP_VERSION }}
           path: |
-            android/app/build/outputs/apk/release/app-release-signed.apk
-            android/app/build/outputs/apk/release/app-release-unsigned.apk
-            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/release/einsatzcockpit-v${{ env.APP_VERSION }}.apk
+            android/app/build/outputs/apk/release/einsatzcockpit-v${{ env.APP_VERSION }}-unsigned.apk
+            android/app/build/outputs/apk/debug/einsatzcockpit-v${{ env.APP_VERSION }}-debug.apk
 
       - name: Create GitHub Release (nur auf Tags mit Keystore)
         if: ${{ startsWith(github.ref, 'refs/tags/') && env.HAS_KEYSTORE == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/release/app-release-signed.apk
+          files: android/app/build/outputs/apk/release/einsatzcockpit-v${{ env.APP_VERSION }}.apk
           name: Einsatzcockpit Android ${{ github.ref_name }}
           body: |
             ## Einsatzcockpit Android ${{ github.ref_name }} (Build ${{ github.run_number }})
