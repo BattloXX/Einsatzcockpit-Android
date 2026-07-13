@@ -1,6 +1,6 @@
 {
   "name": "einsatzcockpit-android",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "Native Android-App für einsatzcockpit.com (Capacitor-Wrapper)",
   "private": true,
   "scripts": {

@@ -14,7 +14,7 @@
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" /> <!-- Android 14+ -->
 
-<!-- Kamera für QR-Scanner -->
+<!-- Kamera für QR-Scanner und Foto-Upload (Einsatz-/Aufgaben-/Stellen-Medien) -->
 <uses-permission android:name="android.permission.CAMERA" />
 <uses-feature android:name="android.hardware.camera" android:required="false" />
 

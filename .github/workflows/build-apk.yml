@@ -107,6 +107,12 @@ jobs:
               "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
               # Benachrichtigungen für Foreground-Service (Android 13+)
               "android.permission.POST_NOTIFICATIONS",
+              # Foto-Upload (Einsatz-/Aufgaben-/Stellen-Medien): das WebView-Datei-
+              # Feld (capture="environment") bietet "Kamera" sonst nicht zuverlässig
+              # an, weil Capacitors Datei-Chooser die Kamera-Option nur zeigt, wenn
+              # die App die Permission bereits (deklarativ) besitzt - bisher kam sie
+              # nur transitiv ueber den Barcode-Scanner-Plugin mit, was fragil war.
+              "android.permission.CAMERA",
           ]
 
           added = []
@@ -120,6 +126,11 @@ jobs:
           if "android.hardware.location.gps" not in content:
               content = content.replace("</manifest>", f"    {gps_feature}\n</manifest>")
               added.append("hardware.location.gps")
+
+          camera_feature = '<uses-feature android:name="android.hardware.camera" android:required="false" />'
+          if "android.hardware.camera" not in content:
+              content = content.replace("</manifest>", f"    {camera_feature}\n</manifest>")
+              added.append("hardware.camera")
 
           with open(path, "w", encoding="utf-8") as f:
               f.write(content)
