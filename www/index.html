@@ -211,7 +211,13 @@ waitForCapacitor(async () => {
   const { value: usedAccountLogin } = await Preferences.get({ key: 'el_used_account_login' });
   if (usedAccountLogin) {
     setStatus('Anmelden…');
-    window.location.replace('https://einsatzcockpit.com/?native=1');
+    // Push-Registrierung faengt HIER (still, ohne Setup-Screen) jeden weiteren
+    // App-Start ab - beim allerersten Login (openAccountLogin()) lief sie schon
+    // einmal, aber ein FCM-Token kann sich aendern (Neuinstallation, Datenlöschung).
+    // Backend liest fcm_token zentral in main.py::session_middleware fuer JEDEN
+    // authentifizierten Request, nicht nur beim Login-Formular.
+    const quietFcmToken = await registerPushToken();
+    window.location.replace(withFcmParam('https://einsatzcockpit.com/?native=1', quietFcmToken));
     return;
   }
 
