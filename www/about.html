@@ -126,6 +126,27 @@
     </div>
   </div>
 
+  <!-- Push-Benachrichtigungen: hier statt auf /admin/push-nachrichten, weil die
+       Capacitor-Bridge auf DIESER lokalen Seite garantiert verfuegbar ist - auf
+       der remote nachgeladenen Admin-Seite ist sie das bekanntermassen nicht
+       zuverlaessig (siehe Backend main.py::session_middleware-Kommentar). -->
+  <div class="card">
+    <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>🔔 Push-Benachrichtigungen</span>
+      <span class="badge-soft" id="pushStatusBadge">Prüfe…</span>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+      Registriert dieses Gerät für Push-Benachrichtigungen (Firebase Cloud Messaging).
+      Nach der Registrierung wirst du kurz zur App weitergeleitet, um sie mit deinem
+      Konto zu verknüpfen.
+    </p>
+    <div style="margin-top:10px;">
+      <button class="btn-primary" style="width:100%;" id="btnRegisterPush" onclick="registerPushAndContinue()">
+        🔔 Push jetzt registrieren
+      </button>
+    </div>
+  </div>
+
   <!-- SMS-Gateway (nur sichtbar wenn dieses Geraet als Gateway konfiguriert ist) -->
   <div class="card" id="gatewayCard" style="display:none;">
     <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
@@ -172,7 +193,94 @@ waitForCapacitor(async () => {
   }
 
   checkForUpdate();
+  updatePushStatusBadge();
 });
+
+// ── Push-Benachrichtigungen (FCM) ─────────────────────────────────────────────
+// Zeigt nur den lokalen OS-Berechtigungsstatus - ob der Server tatsaechlich
+// einen Token fuer dieses Geraet gespeichert hat, laesst sich von dieser Seite
+// aus nicht abfragen (anderer Origin als einsatzcockpit.com, keine Session-
+// Cookies hier). Der "Push jetzt registrieren"-Button ist der verlaessliche Weg.
+const PUSH_TIMEOUT_MS = 4000;
+
+async function updatePushStatusBadge() {
+  const badge = document.getElementById('pushStatusBadge');
+  if (!badge) return;
+  const PushNotifications = window.Capacitor?.Plugins?.PushNotifications;
+  if (!PushNotifications || !PushNotifications.checkPermissions) {
+    badge.textContent = 'unbekannt';
+    return;
+  }
+  try {
+    const perm = await PushNotifications.checkPermissions();
+    if (perm.receive === 'granted') {
+      badge.textContent = 'Erlaubt';
+      badge.className = 'badge-soft on';
+    } else {
+      badge.textContent = 'Nicht erlaubt';
+      badge.className = 'badge-soft off';
+    }
+  } catch (_) {
+    badge.textContent = 'unbekannt';
+  }
+}
+
+// Holt einen frischen FCM-Token - identisches Muster wie index.html::registerPushToken(),
+// hier dupliziert statt geteilt (siehe Konvention: jede lokale Seite in www/ ist
+// selbststaendig, kein gemeinsames Script-Include in diesem Projekt).
+async function fetchFcmToken() {
+  try {
+    const PushNotifications = window.Capacitor?.Plugins?.PushNotifications;
+    if (!PushNotifications) return null;
+    const perm = await PushNotifications.requestPermissions();
+    if (perm.receive !== 'granted') return null;
+
+    return await new Promise((resolve) => {
+      let done = false;
+      const finish = (value) => { if (!done) { done = true; resolve(value); } };
+      PushNotifications.addListener('registration', (reg) => finish(reg.value));
+      PushNotifications.addListener('registrationError', (err) => {
+        console.warn('[Push] Registrierung fehlgeschlagen:', err);
+        finish(null);
+      });
+      PushNotifications.register().catch((e) => {
+        console.warn('[Push] register() Fehler:', e);
+        finish(null);
+      });
+      setTimeout(() => finish(null), PUSH_TIMEOUT_MS);
+    });
+  } catch (e) {
+    console.warn('[Push] Registrierung uebersprungen:', e);
+    return null;
+  }
+}
+
+async function registerPushAndContinue() {
+  const btn = document.getElementById('btnRegisterPush');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = '⏳ Registriere…';
+  try {
+    const token = await fetchFcmToken();
+    await updatePushStatusBadge();
+    if (!token) {
+      toast('Registrierung fehlgeschlagen oder Berechtigung verweigert.');
+      return;
+    }
+    toast('Push registriert – wird mit dem Konto verknüpft…');
+    // Backend liest fcm_token zentral in main.py::session_middleware fuer JEDEN
+    // authentifizierten Request - dieselbe Route wie der stille Rueckkehr-Redirect
+    // in index.html.
+    setTimeout(() => {
+      window.location.replace(
+        'https://einsatzcockpit.com/?native=1&fcm_token=' + encodeURIComponent(token));
+    }, 900);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
 
 // ── Live-Verbindungsstatus des SMS-Gateways (identische Quelle wie gateway.html:
 // SmsGatewayService.isConnected im nativen Plugin, kein Netzwerk-Roundtrip). ──
