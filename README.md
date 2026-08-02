@@ -7,6 +7,7 @@ Die App ist ein schlanker **Capacitor-Wrapper** um die bestehende Progressive We
 | Funktion | Technologie |
 |---|---|
 | **Zuverlässige Push-Benachrichtigungen** (auch bei geschlossener App) | Firebase Cloud Messaging (FCM) |
+| **Alarmton trotz Lautlos/Vibration** (optional, nur neue Einsätze) | Nativer Android Notification-Channel |
 | **Dauerhafter Login** (kein tägliches Neu-Einloggen) | Device-Token in Secure Storage |
 | **QR-Code Login** | App öffnen → QR scannen → sofort eingeloggt |
 | **GPS-Standort im Einsatz** (Hintergrund, nur bei aktivem Einsatz) | Background Geolocation → Lagekarte |

@@ -33,6 +33,9 @@
     <!-- Benachrichtigungen für Foreground-Service (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Zugriff wird nur auf Wunsch fuer das Uebergehen von "Nicht stoeren" erteilt. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+
     <application>
 
         <service

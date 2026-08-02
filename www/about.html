@@ -86,6 +86,15 @@
     .badge-soft.on { background: rgba(126,231,160,.14); color: var(--green); border-color: rgba(126,231,160,.4); }
     .badge-soft.off { background: rgba(255,180,171,.14); color: var(--red); border-color: rgba(255,180,171,.4); }
 
+    .toggle-row { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;color:var(--text);font-size:.88rem; }
+    .toggle { position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0; }
+    .toggle input { opacity:0;width:0;height:0; }
+    .toggle-slider { position:absolute;inset:0;cursor:pointer;background:var(--s-hi);border:1px solid var(--border);border-radius:999px;transition:.2s; }
+    .toggle-slider::before { content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:var(--muted);border-radius:50%;transition:.2s; }
+    .toggle input:checked + .toggle-slider { background:var(--primary-c); }
+    .toggle input:checked + .toggle-slider::before { transform:translateX(20px);background:#fff; }
+    .toggle input:disabled + .toggle-slider { opacity:.45;cursor:default; }
+
     /* ── Toast ───────────────────────────────────────────────────────────── */
     #toast {
       position: fixed; bottom: 24px; left: 50%;
@@ -147,6 +156,20 @@
     </div>
   </div>
 
+  <div class="card" id="alarmCard">
+    <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>🔊 Alarmton bei Lautlos</span>
+      <span class="badge-soft" id="alarmStatusBadge">Prüfe…</span>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+      Neue Einsätze werden auch dann hörbar gemeldet, wenn das Gerät auf Vibration oder lautlos gestellt ist.
+    </p>
+    <label class="toggle-row"><span>Ton bei Lautlos/Vibration</span><span class="toggle"><input type="checkbox" id="alarmEnabledToggle" onchange="setAlarmEnabled(this.checked)"><span class="toggle-slider"></span></span></label>
+    <label class="toggle-row"><span>Auch bei „Nicht stören“</span><span class="toggle"><input type="checkbox" id="alarmDndToggle" onchange="configureAlarmDnd(this.checked)"><span class="toggle-slider"></span></span></label>
+    <div style="margin-top:14px;"><button class="btn-primary" style="width:100%;" id="btnAlarmTest" onclick="playAlarmTest()">▶ Testton abspielen</button></div>
+    <p id="alarmUnsupported" style="display:none;font-size:.82rem;color:var(--muted);margin-top:10px;">Diese Funktion wird erst ab Android 8 unterstützt.</p>
+  </div>
+
   <!-- SMS-Gateway (nur sichtbar wenn dieses Geraet als Gateway konfiguriert ist) -->
   <div class="card" id="gatewayCard" style="display:none;">
     <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
@@ -178,10 +201,14 @@ function waitForCapacitor(cb) {
 }
 
 let SmsGateway;
+let AlarmChannel;
+let Preferences;
+let alarmDndSetupPending = false;
 
 waitForCapacitor(async () => {
-  const { Preferences } = window.Capacitor.Plugins;
+  Preferences = window.Capacitor.Plugins.Preferences;
   SmsGateway = window.Capacitor.Plugins.SmsGateway;
+  AlarmChannel = window.Capacitor.Plugins.AlarmChannel;
 
   // Gateway-Karte nur zeigen wenn dieses Geraet als Gateway konfiguriert ist
   // (Einheit-Geraet oder kombiniertes Geraet mit Gateway-Rolle).
@@ -194,6 +221,97 @@ waitForCapacitor(async () => {
 
   checkForUpdate();
   updatePushStatusBadge();
+  updateAlarmStatus();
+});
+
+// ── Alarmkanal ────────────────────────────────────────────────────────────────
+async function updateAlarmStatus() {
+  if (!AlarmChannel?.getStatus) return;
+  try {
+    const status = await AlarmChannel.getStatus();
+    const card = document.getElementById('alarmCard');
+    const badge = document.getElementById('alarmStatusBadge');
+    const enabled = document.getElementById('alarmEnabledToggle');
+    const dnd = document.getElementById('alarmDndToggle');
+    if (!status.supported) {
+      card.querySelectorAll('.toggle-row, button').forEach((el) => el.style.display = 'none');
+      document.getElementById('alarmUnsupported').style.display = '';
+      badge.textContent = 'Nicht unterstützt';
+      badge.className = 'badge-soft off';
+      return;
+    }
+    enabled.checked = status.enabled;
+    dnd.checked = status.dndBypass;
+    dnd.disabled = !status.enabled;
+    document.getElementById('btnAlarmTest').disabled = !status.enabled;
+    badge.textContent = status.enabled ? (status.dndBypass ? 'Aktiv · DND übergangen' : 'Aktiv') : 'Aus';
+    badge.className = 'badge-soft ' + (status.enabled ? 'on' : 'off');
+    await Preferences?.set({ key: 'el_alarm_override_silent', value: status.enabled ? '1' : '0' });
+  } catch (_) {
+    document.getElementById('alarmStatusBadge').textContent = 'unbekannt';
+  }
+}
+
+async function setAlarmEnabled(enabled) {
+  try {
+    if (enabled) {
+      const PushNotifications = window.Capacitor?.Plugins?.PushNotifications;
+      const perm = await PushNotifications?.requestPermissions();
+      if (!perm || perm.receive !== 'granted') {
+        toast('Benachrichtigungen müssen zuerst erlaubt werden.');
+        await updateAlarmStatus();
+        return;
+      }
+    }
+    await AlarmChannel.setEnabled({ enabled });
+    await updateAlarmStatus();
+    toast(enabled ? 'Alarmton bei Lautlos aktiviert.' : 'Alarmton bei Lautlos deaktiviert.');
+  } catch (_) {
+    toast('Alarmton konnte nicht geändert werden.');
+    await updateAlarmStatus();
+  }
+}
+
+async function configureAlarmDnd(enabled) {
+  try {
+    const status = await AlarmChannel.getStatus();
+    if (!status.enabled) { await updateAlarmStatus(); return; }
+    if (enabled && !status.dndPermission) {
+      alarmDndSetupPending = true;
+      toast('Bitte Einsatzcockpit den Zugriff auf „Nicht stören“ erlauben.');
+      await AlarmChannel.openDndAccessSettings();
+    } else {
+      toast('Bitte „Nicht stören übergehen“ in den Kanaleinstellungen festlegen.');
+      await AlarmChannel.openChannelSettings();
+    }
+  } catch (_) {
+    toast('Systemeinstellungen konnten nicht geöffnet werden.');
+  } finally {
+    await updateAlarmStatus();
+  }
+}
+
+async function playAlarmTest() {
+  try {
+    await AlarmChannel.playTestNotification();
+    toast('Testalarm wurde abgespielt.');
+  } catch (_) {
+    toast('Testalarm konnte nicht abgespielt werden.');
+  }
+}
+
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || !AlarmChannel) return;
+  if (alarmDndSetupPending) {
+    alarmDndSetupPending = false;
+    const status = await AlarmChannel.getStatus();
+    if (status.dndPermission && !status.dndBypass) {
+      toast('Bitte jetzt „Nicht stören übergehen“ aktivieren.');
+      await AlarmChannel.openChannelSettings();
+      return;
+    }
+  }
+  updateAlarmStatus();
 });
 
 // ── Push-Benachrichtigungen (FCM) ─────────────────────────────────────────────

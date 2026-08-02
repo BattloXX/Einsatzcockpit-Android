@@ -126,6 +126,12 @@ function waitForCapacitor(cb, timeout = 3000) {
 waitForCapacitor(async () => {
   const { Preferences, SmsGateway } = window.Capacitor.Plugins;
 
+  try {
+    const { value } = await Preferences.get({ key: 'el_alarm_override_silent' });
+    const AlarmChannel = window.Capacitor.Plugins.AlarmChannel;
+    if (value === '1' && AlarmChannel && !(await AlarmChannel.getStatus()).enabled) await AlarmChannel.setEnabled({ enabled: true });
+  } catch (_) { /* Alarmkanal-Reconcile ist best-effort */ }
+
   // Rückkehr von der PIN-Pairing-Bestätigungsseite (geraet-login-pin): Capacitor
   // injiziert seine JS-Bruecke nicht zuverlässig in extern nachgeladene Seiten
   // (server.allowNavigation, bekannte Capacitor-Einschränkung) — die
