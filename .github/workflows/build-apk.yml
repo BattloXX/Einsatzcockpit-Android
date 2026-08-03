@@ -40,6 +40,17 @@ jobs:
           mkdir -p android/app/src/main/assets
           npx cap sync android
 
+      - name: Patch Android SDK 36 and AGP
+        run: |
+          sed -i "s|com.android.tools.build:gradle:8.7.2|com.android.tools.build:gradle:8.9.1|" android/build.gradle
+          sed -i "s|compileSdkVersion = 35|compileSdkVersion = 36|" android/variables.gradle
+          echo "android.suppressUnsupportedCompileSdk=36" >> android/gradle.properties
+          cat >> android/build.gradle <<'EOF'
+          subprojects { afterEvaluate { p -> if (p.hasProperty('android')) { p.android.compileSdk = 36 } } }
+          EOF
+          grep -q "compileSdkVersion = 36" android/variables.gradle || { echo "SDK-36-Patch fehlgeschlagen"; exit 1; }
+          grep -q "gradle:8.9.1" android/build.gradle || { echo "AGP-Patch fehlgeschlagen"; exit 1; }
+
       - name: Patch Version in build.gradle
         run: |
           # Bei Tag-Builds (v*) kommt die versionName direkt aus dem Git-Tag,
