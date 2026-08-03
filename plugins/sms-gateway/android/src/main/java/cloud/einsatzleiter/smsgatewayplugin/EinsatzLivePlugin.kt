@@ -27,7 +27,7 @@ class EinsatzLivePlugin : Plugin() {
 
     @PluginMethod
     fun setEnabled(call: PluginCall) {
-        val enabled = call.getBool("enabled") ?: false
+        val enabled = call.getBoolean("enabled") ?: false
         context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
             .edit().putString(EinsatzLivePoller.PREF_ENABLED, if (enabled) "1" else "0").apply()
         sendServiceAction(
