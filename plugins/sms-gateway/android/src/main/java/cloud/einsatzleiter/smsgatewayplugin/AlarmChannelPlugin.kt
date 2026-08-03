@@ -5,7 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
-import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
@@ -85,8 +85,7 @@ class AlarmChannelPlugin : Plugin() {
             NotificationChannel(CHANNEL_ID, "Einsatzalarm (übersteuert Lautlos)", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Akustischer Alarm bei neuen Einsätzen, auch wenn das Gerät auf Vibration oder lautlos steht."
                 setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+                    Uri.parse("android.resource://${context.packageName}/raw/einsatz_alarm"),
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ALARM)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
