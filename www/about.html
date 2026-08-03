@@ -319,7 +319,9 @@ document.addEventListener('visibilitychange', async () => {
 // einen Token fuer dieses Geraet gespeichert hat, laesst sich von dieser Seite
 // aus nicht abfragen (anderer Origin als einsatzcockpit.com, keine Session-
 // Cookies hier). Der "Push jetzt registrieren"-Button ist der verlaessliche Weg.
-const PUSH_TIMEOUT_MS = 4000;
+// Anders als im stillen Login-Flow darf der erste Token-Abruf hier auf langsamen
+// Geraeten bzw. Verbindungen ausreichend lange auf Google Play Services warten.
+const PUSH_TIMEOUT_MS = 30000;
 
 async function updatePushStatusBadge() {
   const badge = document.getElementById('pushStatusBadge');
@@ -353,23 +355,37 @@ async function fetchFcmToken() {
     const perm = await PushNotifications.requestPermissions();
     if (perm.receive !== 'granted') return null;
 
-    return await new Promise((resolve) => {
+    return await new Promise((resolve, reject) => {
       let done = false;
-      const finish = (value) => { if (!done) { done = true; resolve(value); } };
+      let timeoutId;
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timeoutId);
+        resolve(value);
+      };
+      const fail = (message) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timeoutId);
+        reject(new Error(message));
+      };
       PushNotifications.addListener('registration', (reg) => finish(reg.value));
       PushNotifications.addListener('registrationError', (err) => {
         console.warn('[Push] Registrierung fehlgeschlagen:', err);
-        finish(null);
+        fail('Push-Registrierung fehlgeschlagen. Bitte erneut versuchen.');
       });
+      timeoutId = setTimeout(() => {
+        fail('Keine Antwort von Google Play Services. Bitte Internetverbindung prüfen und erneut versuchen.');
+      }, PUSH_TIMEOUT_MS);
       PushNotifications.register().catch((e) => {
         console.warn('[Push] register() Fehler:', e);
-        finish(null);
+        fail('Push-Registrierung konnte nicht gestartet werden.');
       });
-      setTimeout(() => finish(null), PUSH_TIMEOUT_MS);
     });
   } catch (e) {
-    console.warn('[Push] Registrierung uebersprungen:', e);
-    return null;
+    console.warn('[Push] Registrierung fehlgeschlagen:', e);
+    throw e;
   }
 }
 
@@ -394,6 +410,8 @@ async function registerPushAndContinue() {
       window.location.replace(
         'https://einsatzcockpit.com/?native=1&fcm_token=' + encodeURIComponent(token));
     }, 900);
+  } catch (e) {
+    toast(e?.message || 'Push-Registrierung fehlgeschlagen. Bitte erneut versuchen.');
   } finally {
     btn.disabled = false;
     btn.textContent = prev;
