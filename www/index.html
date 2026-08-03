@@ -37,6 +37,9 @@
     button.btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
     .divider { display: flex; align-items: center; gap: 10px; margin: 18px 0 8px; color: var(--muted); font-size: .8rem; }
     .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+    .opt-in { display:flex; gap:10px; text-align:left; margin-top:16px; align-items:flex-start; }
+    .opt-in input { width:18px; height:18px; margin-top:2px; accent-color:var(--blue); }
+    .opt-in label { font-size:.85rem; color:var(--text); line-height:1.4; }
     .spinner {
       width: 36px; height: 36px; border: 3px solid var(--border);
       border-top-color: var(--blue); border-radius: 50%;
@@ -55,11 +58,22 @@
   <div class="card" id="setupCard" style="display:none;">
     <h2>👤 Mit Account anmelden</h2>
     <p>Persönlicher Account (Benutzername/Passwort)</p>
+    <div class="opt-in">
+      <input id="liveOptIn" type="checkbox">
+      <label for="liveOptIn">Live-Einsatzstatus aktivieren. Die App bleibt dafür dauerhaft im Hintergrund aktiv und zeigt laufende Einsätze als Dauerbenachrichtigung.</label>
+    </div>
     <button onclick="openAccountLogin()">Mit Account anmelden</button>
     <div class="divider"><span>oder Geräte-Login</span></div>
     <p>Scanne den QR-Code aus dem Admin-Bereich<br>(Admin → Geräte-Login → + Gerät registrieren)</p>
     <button class="btn-secondary" id="scanBtn" onclick="startScan()">QR-Code scannen</button>
     <button class="btn-secondary" onclick="openPinPairing()">PIN eingeben statt scannen</button>
+  </div>
+
+  <div class="card" id="liveOptInCard" style="display:none;">
+    <h2>Live-Einsatzstatus</h2>
+    <p>Die App kann im Hintergrund aktiv bleiben und laufende Einsätze dauerhaft auf Sperrbildschirm und Statusleiste anzeigen. Möchtest du das einschalten?</p>
+    <button onclick="finishAccountLiveChoice(true)">Live-Einsatzstatus aktivieren</button>
+    <button class="btn-secondary" onclick="finishAccountLiveChoice(false)">Ohne Live-Einsatzstatus fortfahren</button>
   </div>
 
   <div id="error"></div>
@@ -125,6 +139,7 @@ function waitForCapacitor(cb, timeout = 3000) {
 
 waitForCapacitor(async () => {
   const { Preferences, SmsGateway } = window.Capacitor.Plugins;
+  await Preferences.set({ key: 'el_base_url', value: 'https://einsatzcockpit.com' });
 
   try {
     const { value } = await Preferences.get({ key: 'el_alarm_override_silent' });
@@ -216,6 +231,17 @@ waitForCapacitor(async () => {
   // (Nutzer-Feedback 2026-07-11: Login-Screen soll nicht erneut erscheinen).
   const { value: usedAccountLogin } = await Preferences.get({ key: 'el_used_account_login' });
   if (usedAccountLogin) {
+    const { value: liveEnabled } = await Preferences.get({ key: 'el_live_enabled' });
+    if (liveEnabled === null) {
+      setStatus('Live-Einsatzstatus einrichten');
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('liveOptInCard').style.display = '';
+      return;
+    }
+    if (liveEnabled === '1') {
+      const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+      if (DevKA) { try { await DevKA.startKeepalive(); } catch (_) {} }
+    }
     setStatus('Anmelden…');
     // Push-Registrierung faengt HIER (still, ohne Setup-Screen) jeden weiteren
     // App-Start ab - beim allerersten Login (openAccountLogin()) lief sie schon
@@ -262,9 +288,31 @@ async function openAccountLogin() {
   try {
     const { Preferences } = window.Capacitor.Plugins;
     await Preferences.set({ key: 'el_used_account_login', value: '1' });
+    const enabled = document.getElementById('liveOptIn').checked;
+    await Preferences.set({ key: 'el_live_enabled', value: enabled ? '1' : '0' });
+    if (enabled) {
+      const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+      if (DevKA) await DevKA.startKeepalive();
+    }
   } catch (_) { /* Merken ist best-effort, Login funktioniert trotzdem */ }
   const fcmToken = await registerPushToken();
   window.location.replace(withFcmParam('https://einsatzcockpit.com/login?native=1', fcmToken));
+}
+
+async function finishAccountLiveChoice(enabled) {
+  try {
+    const { Preferences } = window.Capacitor.Plugins;
+    await Preferences.set({ key: 'el_live_enabled', value: enabled ? '1' : '0' });
+    if (enabled) {
+      const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+      if (DevKA) await DevKA.startKeepalive();
+    }
+  } catch (_) { /* Navigation bleibt auch ohne native Brücke möglich */ }
+  setStatus('Anmelden…');
+  document.getElementById('liveOptInCard').style.display = 'none';
+  document.getElementById('spinner').style.display = '';
+  const fcmToken = await registerPushToken();
+  window.location.replace(withFcmParam('https://einsatzcockpit.com/?native=1', fcmToken));
 }
 
 function setStatus(msg) {
@@ -338,6 +386,7 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
     await Preferences.set({ key: 'el_gateway_url',   value: baseUrl });
     await Preferences.set({ key: 'el_gateway_token', value: gatewayTok });
     await Preferences.set({ key: 'el_device_token',  value: token });
+    await Preferences.set({ key: 'el_base_url',      value: baseUrl });
 
     if (SmsGateway) {
       const { granted } = await SmsGateway.requestPermission();
@@ -350,6 +399,8 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
     }
     // Board ist die Hauptansicht; Gateway läuft ab jetzt im Hintergrund weiter.
     setStatus('Anmelden…');
+    const CombinedKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (CombinedKA) { try { await CombinedKA.startKeepalive(); } catch (_) {} }
     const combinedFcmToken = await registerPushToken();
     window.location.replace(withFcmParam(
       `${baseUrl}/geraet-login?token=${encodeURIComponent(token)}&native=1`, combinedFcmToken));
@@ -377,6 +428,9 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
     // ── Einheit-Gerät-Modus ────────────────────────────────────────────────
     setStatus('Anmelden…');
     await Preferences.set({ key: 'el_device_token', value: token });
+    await Preferences.set({ key: 'el_base_url', value: parsed.origin });
+    const UnitKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (UnitKA) { try { await UnitKA.startKeepalive(); } catch (_) {} }
     const unitFcmToken = await registerPushToken();
     window.location.replace(withFcmParam(
       `${parsed.origin}/geraet-login?token=${encodeURIComponent(token)}&native=1`, unitFcmToken));

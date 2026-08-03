@@ -25,6 +25,8 @@ class DeviceKeepaliveService : Service() {
     companion object {
         const val ACTION_START = "cloud.einsatzleiter.smsgatewayplugin.KEEPALIVE_START"
         const val ACTION_STOP  = "cloud.einsatzleiter.smsgatewayplugin.KEEPALIVE_STOP"
+        const val ACTION_LIVE_REFRESH = "cloud.einsatzleiter.smsgatewayplugin.LIVE_REFRESH"
+        const val ACTION_LIVE_DISABLE = "cloud.einsatzleiter.smsgatewayplugin.LIVE_DISABLE"
 
         private const val NOTIF_CHANNEL_ID = "ec_device"
         private const val NOTIF_ID         = 7302
@@ -32,6 +34,7 @@ class DeviceKeepaliveService : Service() {
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var livePoller: EinsatzLivePoller? = null
 
     private val notificationManager by lazy {
         getSystemService(NotificationManager::class.java)
@@ -42,28 +45,43 @@ class DeviceKeepaliveService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        livePoller = EinsatzLivePoller(this).also { it.restorePersistedState() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_LIVE_REFRESH) {
+            livePoller?.start()
+            livePoller?.refreshNow()
+            return START_STICKY
+        }
+        if (intent?.action == ACTION_LIVE_DISABLE) {
+            livePoller?.disable()
+            return START_STICKY
+        }
         if (intent?.action == ACTION_STOP) {
+            livePoller?.disable()
             releaseWakeLock()
             stopSelf()
             return START_NOT_STICKY
         }
         startForegroundCompat()
         acquireWakeLock()
+        livePoller?.start()
         return START_STICKY
     }
 
     override fun onDestroy() {
+        livePoller?.stop()
         releaseWakeLock()
         super.onDestroy()
     }
 
     /** Defensiv: bei einem System-Timeout Foreground erneuern statt gekillt zu werden. */
     override fun onTimeout(startId: Int) {
+        livePoller?.stop()
         try { startForegroundCompat() } catch (_: Exception) {}
         acquireWakeLock()
+        livePoller?.start()
     }
 
     /**

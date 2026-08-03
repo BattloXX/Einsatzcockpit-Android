@@ -21,6 +21,8 @@ class BootReceiver : BroadcastReceiver() {
         val gwUrl       = prefs.getString("el_gateway_url",   null)
         val gwToken     = prefs.getString("el_gateway_token", null)
         val deviceToken = prefs.getString("el_device_token",  null)
+        val accountLogin = prefs.getString("el_used_account_login", null) == "1"
+        val liveEnabled  = prefs.getString("el_live_enabled", null) == "1"
 
         var shouldLaunch = false
 
@@ -34,7 +36,7 @@ class BootReceiver : BroadcastReceiver() {
             shouldLaunch = true
         }
 
-        if (!deviceToken.isNullOrEmpty()) {
+        if (!deviceToken.isNullOrEmpty() || (accountLogin && liveEnabled)) {
             val keepaliveIntent = Intent(context, DeviceKeepaliveService::class.java).apply {
                 this.action = DeviceKeepaliveService.ACTION_START
             }

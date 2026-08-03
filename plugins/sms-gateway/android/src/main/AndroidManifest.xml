@@ -32,6 +32,7 @@
 
     <!-- Benachrichtigungen für Foreground-Service (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
 
     <!-- Zugriff wird nur auf Wunsch fuer das Uebergehen von "Nicht stoeren" erteilt. -->
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
@@ -55,7 +56,7 @@
             android:stopWithTask="false">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Haelt die Einsatz-Geraete-Anzeige im Dauerbetrieb aktiv, damit Live-Updates auch bei ausgeschaltetem Bildschirm empfangen werden." />
+                android:value="Haelt die Einsatz-Geraete-Anzeige und den laufenden Einsatz-Livestatus im Dauerbetrieb aktuell, auch bei ausgeschaltetem Bildschirm." />
         </service>
 
         <receiver
@@ -68,6 +69,10 @@
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name="cloud.einsatzleiter.smsgatewayplugin.EinsatzLiveDismissReceiver"
+            android:exported="false" />
 
     </application>
 
