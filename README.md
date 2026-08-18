@@ -1,18 +1,20 @@
-# einsatzleiter.cloud Android-App
+# Einsatzcockpit Android-App
 
-Native Android-App für [einsatzleiter.cloud](https://einsatzleiter.cloud) — ein digitales Einsatzleiter-Werkzeug für Feuerwehren und BOS-Organisationen.
+Native Android-App für [einsatzcockpit.com](https://einsatzcockpit.com) — ein digitales Einsatzleiter-Werkzeug für Feuerwehren und BOS-Organisationen. (Historischer Name/Domain: einsatzleiter.cloud — seit dem Rebrand nur noch als Übergangs-Redirect aktiv, siehe `capacitor.config.ts`.)
 
 Die App ist ein schlanker **Capacitor-Wrapper** um die bestehende Progressive Web App. Sie lädt die PWA direkt vom Server und ergänzt sie um native Android-Funktionen, die im Browser nicht zuverlässig verfügbar sind:
 
 | Funktion | Technologie |
 |---|---|
-| **Zuverlässige Push-Benachrichtigungen** (auch bei geschlossener App) | Firebase Cloud Messaging (FCM) |
+| **Zuverlässige Push-Benachrichtigungen** (auch bei geschlossener App, sofortiger Weckruf statt System-Default) | Firebase Cloud Messaging (FCM, Data-only) → eigener `FirebaseMessagingService` |
+| **Dauerbenachrichtigung für laufenden Einsatz** ("Live-Einsatzstatus", Chronometer/Phase, bedarfsgesteuert – läuft nicht permanent im Hintergrund) | `EinsatzLivePoller` + `DeviceKeepaliveService` (Foreground-Service, stoppt nach 15 Min. Leerlauf selbst) |
 | **Alarmton trotz Lautlos/Vibration** (optional, nur neue Einsätze) | Nativer Android Notification-Channel |
 | **Dauerhafter Login** (kein tägliches Neu-Einloggen) | Device-Token in Secure Storage |
-| **QR-Code Login** | App öffnen → QR scannen → sofort eingeloggt |
+| **QR-Code-, PIN- oder Account-Login** | App öffnen → QR scannen / PIN eingeben / Benutzername+Passwort → sofort eingeloggt |
 | **GPS-Standort im Einsatz** (Hintergrund, nur bei aktivem Einsatz) | Background Geolocation → Lagekarte |
 | **Bildschirm aktiv halten** (Atemschutz-Überwachung, Screensaver) | Native Wake Lock |
-| **Sideload-APK** (kein Play Store nötig) | Signierte APK via GitHub Actions |
+| **SMS-Gateway-Modus** (Versand/Empfang über SIM-Karte des Geräts, 24/7-Dauerbetrieb) | Eigenes Capacitor-Plugin, persistente WebSocket-Verbindung zum Backend |
+| **Sideload-APK** (kein Play Store nötig) | Signierte APK via GitHub Actions, CalVer-Versionierung |
 
 > Die Web-App, das Dashboard und alle Browser-Nutzer funktionieren weiterhin unverändert. Diese App ist ein optionaler nativer Client für den Einsatzbetrieb.
 
@@ -21,17 +23,37 @@ Die App ist ein schlanker **Capacitor-Wrapper** um die bestehende Progressive We
 ## Architektur
 
 ```
-Android App (Capacitor)
-  └─ WebView → https://einsatzleiter.cloud
+Android App (Capacitor, appId cloud.einsatzleiter.app)
+  └─ WebView → https://einsatzcockpit.com (allowNavigation, kein server.url)
        └─ native-bridge.js  (aus Backend /static/js/)
             ├─ ELNative.keepAwake(on)       → KeepAwake-Plugin
             ├─ ELNative.startLocation()     → BackgroundGeolocation-Plugin
             ├─ ELNative.stopLocation()      → ^
-            └─ ELNative.scanQr(callback)    → BarcodeScanning-Plugin
-         FCM Push ← Firebase ← Backend (push_service.py)
+            ├─ ELNative.scanQr(callback)    → BarcodeScanning-Plugin
+            └─ pollt /api/v1/device/duty-state, meldet /api/v1/device/location
+
+  Eigene Capacitor-Plugins (plugins/sms-gateway/android/.../smsgatewayplugin/):
+    ├─ EinsatzLivePlugin + DeviceKeepaliveService + EinsatzLivePoller
+    │    → eigener OkHttp-Client (Session-Cookies aus der WebView) pollt
+    │      /api/v1/device/duty-state, baut die Ongoing-Notification
+    │      "Laufender Einsatz" (Channel ec_einsatz_live); der Service läuft
+    │      nur bei aktivem Einsatz/Dienst und stoppt sich nach 15 Min.
+    │      Leerlauf selbst — kein Dauerbetrieb ab Login
+    ├─ EinsatzFirebaseMessagingService → empfängt FCM-Data-Messages auch bei
+    │      beendeter App, weckt den Live-Poller sofort statt beim nächsten
+    │      Poll-Intervall, zeigt sonstige Pushes als eigene Notification
+    ├─ AlarmChannelPlugin → akustischer Alarmkanal (Sirenenton, DND-Bypass)
+    ├─ SmsGatewayPlugin/-Service → persistente WebSocket-Verbindung, eigener
+    │      Foreground-Service (specialUse) für SMS-Versand/-Empfang, 24/7
+    └─ BootReceiver → startet nach Neustart nur das dauerhaft konfigurierte
+           SMS-Gateway neu; der Live-Status wird reaktiv (App-Start/FCM) geweckt
+
+  FCM Push (Data-only) ← Firebase ← Backend (push_service.py)
 ```
 
 Das `native-bridge.js` im Backend erkennt automatisch, ob es in Capacitor läuft (`window.Capacitor.isNativePlatform()`) und stellt `window.ELNative` bereit. In der reinen PWA bleiben alle Funktionen No-Ops oder fallen auf Web-APIs zurück — kein Code-Split nötig.
+
+> Ausführliche Analyse der Notification-/Bridge-Architektur inkl. Begründung der aktuellen Entwurfsentscheidungen: [`docs/notification-bridge-review.md`](docs/notification-bridge-review.md).
 
 ---
 
@@ -84,7 +106,7 @@ npx cap open android   # öffnet Android Studio
 
 ## CI/CD — Automatischer Build via GitHub Actions
 
-Bei jedem Push auf `main` und bei Tags (`v1.x.x`) baut GitHub Actions automatisch eine APK und stellt sie als Artefakt bereit.
+Bei jedem Push auf `main` und bei Tags (`v2026.08.18`, CalVer-Format `vYYYY.MM.DD[.N]` — wie im [Backend-Repo](https://github.com/BattloXX/Einsatzcockpit)) baut GitHub Actions automatisch eine APK und stellt sie als Artefakt bereit. Nach jedem veröffentlichten GitHub Release erhöht `.github/workflows/version-bump.yml` die Version in `package.json`/`package-lock.json` automatisch um einen Tages-Suffix (`.1`, `.2`, …), analog zum Backend-Workflow.
 
 ### Was der Workflow macht
 
@@ -151,11 +173,11 @@ keytool -genkey -v \
 # Normaler Build (Debug-APK als Artefakt)
 git push origin main
 
-# Release mit GitHub Release-Seite (erfordert Keystore-Secrets)
-git tag v1.0.0 && git push origin v1.0.0
+# Release mit GitHub Release-Seite (erfordert Keystore-Secrets, CalVer-Tag)
+git tag v2026.08.18 && git push origin v2026.08.18
 ```
 
-Die fertige APK ist unter **Actions → letzter Run → Artifacts → einsatzleiter.apk** abrufbar.
+Die fertige APK ist unter **Actions → letzter Run → Artifacts → einsatzcockpit-v\<Version\>** abrufbar (bei getaggten Releases zusätzlich direkt unter [Releases](../../releases)).
 
 ---
 
@@ -163,7 +185,7 @@ Die fertige APK ist unter **Actions → letzter Run → Artifacts → einsatzlei
 
 Damit die App GPS-Koordinaten auch bei gesperrtem Display sendet, muss in den **Android-Systemeinstellungen** die Berechtigung auf **„Immer zulassen"** gesetzt werden:
 
-1. **Einstellungen → Apps → einsatzleiter.cloud**
+1. **Einstellungen → Apps → Einsatzcockpit**
 2. **Berechtigungen → Standort**
 3. **„Immer zulassen"** auswählen
 
@@ -182,9 +204,18 @@ Damit die App GPS-Koordinaten auch bei gesperrtem Display sendet, muss in den **
 
 ## Erster Start & Login
 
-1. App öffnen → QR-Scanner erscheint automatisch (erster Start ohne gespeichertem Token)
-2. Im Backend: **Admin → Geräte-Login → Neues Gerät erstellen** → QR-Code anzeigen
-3. QR mit der App scannen → eingeloggt
+Beim ersten Start (kein gespeicherter Token) bietet die App vier Anmeldewege:
+
+| Weg | Für wen |
+|---|---|
+| **QR-Code scannen** | Geräte-Pairing (Fahrzeug-Tablet, Anzeigegerät, SMS-Gateway) — Admin erzeugt den QR unter **Admin → Geräte-Login** |
+| **PIN eingeben** | Geräte-Pairing ohne Kamerazugriff (Admin zeigt zusätzlich eine 10 Minuten gültige PIN) |
+| **Mit Account anmelden** | Persönlicher Account (Benutzername/Passwort), optional mit Live-Einsatzstatus-Opt-in |
+| **SMS-Gateway koppeln** | Eigener QR-Modus (`mode=sms-gateway` bzw. `unit+sms-gateway` für kombinierte Geräte) |
+
+1. App öffnen → Startbildschirm mit den vier Optionen erscheint
+2. Im Backend: **Admin → Geräte-Login → + Gerät registrieren** → QR-Code oder PIN anzeigen
+3. QR scannen / PIN eingeben / Account-Login → eingeloggt
 4. Ab jetzt: dauerhaft eingeloggt (Token gespeichert), automatisches Re-Login nach Session-Ablauf
 
 > Der QR-Code kodiert die URL `/geraet-login?token=...` — die App kann ihn scannen **oder** der Link kann direkt im Browser geöffnet werden.
@@ -201,18 +232,22 @@ Damit die App GPS-Koordinaten auch bei gesperrtem Display sendet, muss in den **
 | `@capacitor-mlkit/barcode-scanning` | QR-Code scannen (Login) |
 | `@capacitor/preferences` | Device-Token sicher speichern |
 | `@capacitor/app` | App-Lifecycle (Vordergrund/Hintergrund) |
+| `@einsatzleiter/sms-gateway-plugin` (lokal, `plugins/sms-gateway/`) | SMS-Gateway, Live-Einsatzstatus, Alarmkanal, eigener FCM-Empfänger — siehe Architektur oben |
 
 ---
 
 ## Zugehöriges Backend-Repo
 
-[BattloXX/Einsatzleiter-Hilfswerkzeug](https://github.com/BattloXX/Einsatzleiter-Hilfswerkzeug) — FastAPI + PWA, der Server hinter dieser App.
+[BattloXX/Einsatzcockpit](https://github.com/BattloXX/Einsatzcockpit) — FastAPI + PWA, der Server hinter dieser App (vormals „Einsatzleiter-Hilfswerkzeug", seit Rebrand 3.0.0 `einsatzcockpit.com`).
 
-Neue Backend-Endpoints für diese App:
+Backend-Endpoints für diese App (`app/routers/device_api.py`):
 - `POST /api/v1/device/fcm-token` — FCM-Token registrieren
 - `POST /api/v1/device/location` — GPS-Position übermitteln
-- `POST /api/v1/device/duty` — Dienst-Status setzen
-- `GET /api/v1/device/duty-state` — Einsatz-Status abfragen (steuert Hintergrund-GPS)
+- `POST /api/v1/device/duty` — Dienst-Status setzen (aktuell ohne Aufrufer in App/Admin-UI; `should_track` wird in der Praxis rein über `incident_active` gesteuert)
+- `GET /api/v1/device/duty-state` — Einsatz-/Dienst-Status abfragen (steuert Hintergrund-GPS und den Live-Poller)
+- `POST /api/v1/device/native-link` — kurzlebiges Token für PDF-Handoff an Custom-Tabs
+
+Details zur FCM-Nutzlast (Data-only statt Notification+Data) siehe `app/services/push_service.py::send_fcm` im Backend-Repo.
 
 ---
 

@@ -1,12 +1,12 @@
-# Einsatzleiter-Android – Setup-Anleitung
+# Einsatzcockpit-Android – Setup-Anleitung
 
-Capacitor-Wrapper-App für [einsatzleiter.cloud](https://einsatzleiter.cloud).
+Capacitor-Wrapper-App für [einsatzcockpit.com](https://einsatzcockpit.com) (historisch: einsatzleiter.cloud, seit dem Rebrand nur noch als Übergangs-Redirect aktiv).
 Lädt die PWA direkt vom Server, ergänzt um native Android-Funktionen.
 
 ## Voraussetzungen
 
 - Node.js 20+
-- Java 17 (Android-Build)
+- Java 21 (Capacitor 7 erfordert Java 21; Java 17 reicht nicht)
 - Android Studio (für lokales Testen)
 - Aktives [Firebase-Projekt](https://console.firebase.google.com/) (für FCM-Push)
 
@@ -89,7 +89,7 @@ APK liegt unter `android/app/build/outputs/apk/release/`.
 
 ## 7. CI/CD (GitHub Actions)
 
-Bei jedem Push auf `main` oder einem Tag `v*` baut der Workflow automatisch eine signierte Release-APK und erstellt einen GitHub Release (nur bei Tags mit gesetztem Keystore-Secret).
+Bei jedem Push auf `main` oder einem Tag `v*` (CalVer-Format `vYYYY.MM.DD[.N]`, z.B. `v2026.08.18`) baut der Workflow automatisch eine signierte Release-APK und erstellt einen GitHub Release (nur bei Tags mit gesetztem Keystore-Secret). `.github/workflows/version-bump.yml` erhöht die Version nach jedem veröffentlichten Release automatisch.
 
 ### Secrets hinterlegen
 
@@ -176,17 +176,26 @@ Den Status prüfst du im Gateway-Bildschirm (Verbindungslog) – nach einem Lang
 
 ## Architektur
 
-Die App lädt `https://einsatzleiter.cloud` in einem WebView. Das Backend-seitige
-`native-bridge.js` erkennt Capacitor (`window.Capacitor.isNative`) und stellt
-`window.ELNative` bereit — alle nativen Funktionen werden darüber aufgerufen.
+Die App lädt `https://einsatzcockpit.com` in einem WebView. Das Backend-seitige
+`native-bridge.js` erkennt Capacitor (`window.Capacitor.isNativePlatform()`) und stellt
+`window.ELNative` bereit — alle nativen Funktionen werden darüber aufgerufen. Daneben
+bringt die App eigene Capacitor-Plugins (`plugins/sms-gateway/`) für SMS-Gateway, den
+Live-Einsatzstatus (Dauerbenachrichtigung) und FCM-Empfang mit. Ausführliche Beschreibung
+inkl. aktueller Entwurfsentscheidungen: [`README.md`](README.md#architektur) und
+[`docs/notification-bridge-review.md`](docs/notification-bridge-review.md).
 
 ```
 Android App (Capacitor)
-  └─ WebView lädt einsatzleiter.cloud
+  └─ WebView lädt einsatzcockpit.com
        └─ native-bridge.js (aus Backend/static/js/)
             ├─ ELNative.keepAwake()       → @capacitor-community/keep-awake
             ├─ ELNative.startLocation()   → @capacitor-community/background-geolocation
             ├─ ELNative.stopLocation()    → ^
             └─ ELNative.scanQr()          → @capacitor-mlkit/barcode-scanning
-         FCM Push ← firebase/messaging (Backend → FCM → App)
+  Eigene Plugins (plugins/sms-gateway/)
+    ├─ EinsatzLivePoller/-Notifier/-Plugin → Live-Einsatzstatus, bedarfsgesteuert
+    ├─ EinsatzFirebaseMessagingService     → Data-only-FCM weckt den Poller sofort
+    ├─ AlarmChannelPlugin                  → akustischer Alarmkanal
+    └─ SmsGatewayPlugin/-Service           → SMS-Gateway, 24/7-WebSocket
+         FCM Push (Data-only) ← firebase/messaging (Backend → FCM → App)
 ```
