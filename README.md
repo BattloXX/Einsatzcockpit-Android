@@ -254,8 +254,9 @@ Details zur FCM-Nutzlast (Data-only statt Notification+Data) siehe `app/services
 ## Offline-Objektdaten (Objektverwaltung, seit Backend-PR9 2026-07-05)
 
 Die App precacht **Objektinformationen inklusive PDFs** für den Einsatz ohne Netz
-(Fahrzeug im Funkloch). Der Mechanismus lebt vollständig in der Remote-PWA und
-läuft automatisch im Capacitor-WebView — **kein nativer Code nötig**:
+(Fahrzeug im Funkloch). Das Befüllen des WebView-Cache-Storage bleibt PWA-Code;
+ein nativer WorkManager-Weckruf stellt den periodischen Lauf auch sicher, wenn
+die sichtbare App-WebView zwischenzeitlich beendet wurde:
 
 - `objekt_offline_sync.js` (Backend, wird nur geladen wenn das Objekt-Modul aktiv
   ist) erkennt die App über `window.Capacitor.getPlatform() === 'android'` und
@@ -267,5 +268,8 @@ läuft automatisch im Capacitor-WebView — **kein nativer Code nötig**:
   `/objekt-medien/*` cache-first und `/objekte/<id>/einsatz` als Offline-Fallback.
 - Im normalen Browser läuft **kein** Voll-Precaching (Datenvolumen) — dort cacht
   der Service Worker nur besuchte Seiten.
+- `ObjektOfflineSyncWorker` startet nur für Einheit-Geräte etwa alle 6 Stunden
+  eine kurzlebige, unsichtbare WebView mit derselben Session und ruft den
+  PWA-Sync auf. Er startet keinen Foreground-Service und hält keinen WakeLock.
 
 Manuell auslösbar in der WebView-Konsole: `window.objektOfflineSync()`.
