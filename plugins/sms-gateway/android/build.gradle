@@ -47,4 +47,5 @@ dependencies {
     // auf activity?.intent zu - ohne eigene Abhaengigkeit ist der Typ hier nicht auflösbar,
     // auch wenn capacitor-android appcompat transitiv mitbringt (nur implementation-scoped).
     implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.firebase:firebase-messaging:24.1.0'
 }

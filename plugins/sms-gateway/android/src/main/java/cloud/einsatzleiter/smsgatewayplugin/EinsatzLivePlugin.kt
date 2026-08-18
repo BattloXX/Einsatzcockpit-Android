@@ -32,7 +32,7 @@ class EinsatzLivePlugin : Plugin() {
             .edit().putString(EinsatzLivePoller.PREF_ENABLED, if (enabled) "1" else "0").apply()
         sendServiceAction(
             if (enabled) DeviceKeepaliveService.ACTION_START
-            else DeviceKeepaliveService.ACTION_LIVE_DISABLE
+            else DeviceKeepaliveService.ACTION_STOP
         )
         call.resolve()
     }

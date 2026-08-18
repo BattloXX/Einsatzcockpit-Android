@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- SMS-Versand über SIM-Karte -->
     <uses-permission android:name="android.permission.SEND_SMS" />
@@ -39,6 +40,12 @@
 
     <application>
 
+        <!-- Pro FCM-Intent darf nur ein Service registriert sein. Der eigene
+             Empfaenger ersetzt Capacitors Default, damit Data-Push den Poller weckt. -->
+        <service
+            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
+            tools:node="remove" />
+
         <service
             android:name="cloud.einsatzleiter.smsgatewayplugin.SmsGatewayService"
             android:foregroundServiceType="specialUse"
@@ -56,7 +63,15 @@
             android:stopWithTask="false">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Haelt die Einsatz-Geraete-Anzeige und den laufenden Einsatz-Livestatus im Dauerbetrieb aktuell, auch bei ausgeschaltetem Bildschirm." />
+                android:value="Haelt waehrend eines Einsatzes oder Dienstes den Einsatz-Livestatus aktuell, auch bei ausgeschaltetem Bildschirm." />
+        </service>
+
+        <service
+            android:name="cloud.einsatzleiter.smsgatewayplugin.EinsatzFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
         </service>
 
         <receiver

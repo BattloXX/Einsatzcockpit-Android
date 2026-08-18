@@ -13,8 +13,8 @@ import com.getcapacitor.annotation.CapacitorPlugin
  *   DeviceKeepalive.startKeepalive()  – startet den ForegroundService mit PARTIAL_WAKE_LOCK
  *   DeviceKeepalive.stopKeepalive()   – stoppt den Service (z.B. beim Abmelden)
  *
- * Wird in index.html aufgerufen bevor die App zur Remote-PWA weiterleitet,
- * damit der Prozess auch bei ausgeschaltetem Bildschirm nicht beendet wird.
+ * Wird bei App-Start reaktiv aufgerufen; der Service beendet sich nach einer
+ * Leerlauffrist selbst, sofern weder Einsatz noch Dienst aktiv sind.
  */
 @CapacitorPlugin(name = "DeviceKeepalive")
 class DeviceKeepalivePlugin : Plugin() {

@@ -18,7 +18,11 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
-class EinsatzLivePoller(private val context: Context) {
+class EinsatzLivePoller(
+    private val context: Context,
+    private val onNeeded: () -> Unit = {},
+    private val onIdleTimeout: () -> Unit = {},
+) {
     companion object {
         const val PREF_BASE_URL = "el_base_url"
         const val PREF_INCIDENT_ID = "el_live_incident_id"
@@ -29,6 +33,10 @@ class EinsatzLivePoller(private val context: Context) {
         private const val IDLE_INTERVAL_MS = 300_000L
         private const val ACTIVE_INTERVAL_MS = 30_000L
         private const val AUTH_INTERVAL_MS = 900_000L
+        // Drei regulaere Idle-Polls: kurze Ruhephasen erzeugen kein Flattern,
+        // nach 15 Minuten ohne Einsatz und ohne Dienst endet der Foreground-Service.
+        private const val IDLE_STOP_MS = 900_000L
+        private const val INITIAL_DELAY_MS = 10_000L
         private const val STALE_WARNING_MS = 900_000L
         private const val HARD_CUTOFF_MS = 3_600_000L
         private val ERROR_BACKOFF_MS = longArrayOf(30_000L, 60_000L, 120_000L, 300_000L)
@@ -48,6 +56,7 @@ class EinsatzLivePoller(private val context: Context) {
     private var inFlight: Call? = null
     private var failures = 0
     private var currentState: EinsatzLiveState? = null
+    private var idleSinceMs: Long? = null
     private val pollRunnable = Runnable { poll() }
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = refreshNow()
@@ -65,7 +74,7 @@ class EinsatzLivePoller(private val context: Context) {
         if (running || !isEnabled()) return
         running = true
         try { connectivityManager.registerDefaultNetworkCallback(networkCallback) } catch (_: Exception) {}
-        schedule(0L)
+        schedule(INITIAL_DELAY_MS)
     }
 
     fun stop() {
@@ -146,6 +155,16 @@ class EinsatzLivePoller(private val context: Context) {
         val now = System.currentTimeMillis()
         if (root.isNull("incident")) {
             clearIncident()
+            if (root.optBoolean("duty_active", false)) {
+                idleSinceMs = null
+                onNeeded()
+            } else {
+                val idleSince = idleSinceMs ?: now.also { idleSinceMs = it }
+                if (now - idleSince >= IDLE_STOP_MS) {
+                    onIdleTimeout()
+                    return
+                }
+            }
             schedule(IDLE_INTERVAL_MS)
             return
         }
@@ -159,6 +178,8 @@ class EinsatzLivePoller(private val context: Context) {
             prefs.edit().remove(PREF_DISMISSED_INCIDENT_ID).apply()
         }
         currentState = state
+        idleSinceMs = null
+        onNeeded()
         prefs.edit()
             .putString(PREF_INCIDENT_ID, state.id.toString())
             .putString(PREF_LAST_OK_MS, now.toString())
