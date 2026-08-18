@@ -5,8 +5,8 @@ import android.content.Context
 import android.content.Intent
 
 /**
- * Startet SmsGatewayService / DeviceKeepaliveService nach einem Neustart und
- * öffnet anschließend die App automatisch, sofern ein Modus konfiguriert ist.
+ * Startet das dauerhaft konfigurierte SMS-Gateway nach einem Neustart.
+ * Der Einsatz-Livestatus wird bedarfsgesteuert durch App-Start oder FCM geweckt.
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -20,10 +20,6 @@ class BootReceiver : BroadcastReceiver() {
         val prefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
         val gwUrl       = prefs.getString("el_gateway_url",   null)
         val gwToken     = prefs.getString("el_gateway_token", null)
-        val deviceToken = prefs.getString("el_device_token",  null)
-        val accountLogin = prefs.getString("el_used_account_login", null) == "1"
-        val liveEnabled  = prefs.getString("el_live_enabled", null) == "1"
-
         var shouldLaunch = false
 
         if (!gwUrl.isNullOrEmpty() && !gwToken.isNullOrEmpty()) {
@@ -33,14 +29,6 @@ class BootReceiver : BroadcastReceiver() {
                 putExtra(SmsGatewayService.EXTRA_TOKEN, gwToken)
             }
             context.startForegroundService(serviceIntent)
-            shouldLaunch = true
-        }
-
-        if (!deviceToken.isNullOrEmpty() || (accountLogin && liveEnabled)) {
-            val keepaliveIntent = Intent(context, DeviceKeepaliveService::class.java).apply {
-                this.action = DeviceKeepaliveService.ACTION_START
-            }
-            context.startForegroundService(keepaliveIntent)
             shouldLaunch = true
         }
 

@@ -1,0 +1,65 @@
+name: Version Bump nach Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  bump:
+    name: CalVer-Version aktualisieren
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: package.json und package-lock.json aktualisieren
+        run: |
+          python3 - <<'EOF'
+          import datetime
+          import json
+          import sys
+
+          with open("package.json", encoding="utf-8") as f:
+              package = json.load(f)
+          old_ver = package.get("version", "")
+          today = datetime.date.today().strftime("%Y.%m.%d")
+          if old_ver == today:
+              new_ver = f"{today}.1"
+          elif old_ver.startswith(f"{today}."):
+              suffix = old_ver.removeprefix(f"{today}.")
+              if not suffix.isdigit():
+                  sys.exit(f"Ungueltiger CalVer-Suffix: {old_ver}")
+              new_ver = f"{today}.{int(suffix) + 1}"
+          else:
+              new_ver = today
+          print(f"Bump: {old_ver} -> {new_ver}")
+
+          for path in ("package.json", "package-lock.json"):
+              with open(path, encoding="utf-8") as f:
+                  data = json.load(f)
+              data["version"] = new_ver
+              if path == "package-lock.json":
+                  data["packages"][""]["version"] = new_ver
+              with open(path, "w", encoding="utf-8") as f:
+                  json.dump(data, f, ensure_ascii=False, indent=2)
+                  f.write("\n")
+          EOF
+
+      - name: Neue Version lesen
+        id: ver
+        run: |
+          V=$(node -p "require('./package.json').version")
+          echo "new_version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Commit und Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: Version auf ${{ steps.ver.outputs.new_version }} aktualisieren (nach Release)"
+          git push origin HEAD:main

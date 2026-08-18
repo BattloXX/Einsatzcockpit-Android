@@ -14,11 +14,8 @@ import androidx.core.app.NotificationCompat
 
 /**
  * Foreground-Service für den Einheit-Gerät-Modus.
- * Hält den App-Prozess am Leben und die CPU wach, damit der WebView-JS-Thread
- * nicht von Android beendet oder eingefroren wird – auch wenn der Bildschirm aus ist.
- * Der Service wird über DeviceKeepalivePlugin gestartet, bevor index.html zur
- * Remote-PWA weiterleitet, und durch BootReceiver nach einem Geräte-Neustart
- * neu gestartet, sofern ein Device-Token gespeichert ist.
+ * Hält den Live-Poller während eines Einsatzes oder Dienstes zuverlässig aktiv.
+ * App-Start und FCM wecken ihn reaktiv; nach 15 Minuten ohne Bedarf stoppt er sich.
  */
 class DeviceKeepaliveService : Service() {
 
@@ -26,7 +23,6 @@ class DeviceKeepaliveService : Service() {
         const val ACTION_START = "cloud.einsatzleiter.smsgatewayplugin.KEEPALIVE_START"
         const val ACTION_STOP  = "cloud.einsatzleiter.smsgatewayplugin.KEEPALIVE_STOP"
         const val ACTION_LIVE_REFRESH = "cloud.einsatzleiter.smsgatewayplugin.LIVE_REFRESH"
-        const val ACTION_LIVE_DISABLE = "cloud.einsatzleiter.smsgatewayplugin.LIVE_DISABLE"
 
         private const val NOTIF_CHANNEL_ID = "ec_device"
         private const val NOTIF_ID         = 7302
@@ -45,17 +41,19 @@ class DeviceKeepaliveService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        livePoller = EinsatzLivePoller(this).also { it.restorePersistedState() }
+        livePoller = EinsatzLivePoller(
+            this,
+            onNeeded = { acquireWakeLock() },
+            onIdleTimeout = { stopAfterIdle() },
+        ).also { it.restorePersistedState() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_LIVE_REFRESH) {
+            startForegroundCompat()
+            acquireWakeLock()
             livePoller?.start()
             livePoller?.refreshNow()
-            return START_STICKY
-        }
-        if (intent?.action == ACTION_LIVE_DISABLE) {
-            livePoller?.disable()
             return START_STICKY
         }
         if (intent?.action == ACTION_STOP) {
@@ -103,8 +101,16 @@ class DeviceKeepaliveService : Service() {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
             .also {
                 it.setReferenceCounted(false)
-                it.acquire(24 * 60 * 60 * 1000L)
+                // Leerlauf endet nach 15 Minuten. Bei echtem Einsatz/Dienst erneuert
+                // jeder erfolgreiche Poll diesen begrenzten Sicherheits-WakeLock.
+                it.acquire(20 * 60 * 1000L)
             }
+    }
+
+    private fun stopAfterIdle() {
+        livePoller?.stop()
+        releaseWakeLock()
+        stopSelf()
     }
 
     private fun releaseWakeLock() {

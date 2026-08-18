@@ -60,7 +60,7 @@
     <p>Persönlicher Account (Benutzername/Passwort)</p>
     <div class="opt-in">
       <input id="liveOptIn" type="checkbox">
-      <label for="liveOptIn">Live-Einsatzstatus aktivieren. Die App bleibt dafür dauerhaft im Hintergrund aktiv und zeigt laufende Einsätze als Dauerbenachrichtigung.</label>
+      <label for="liveOptIn">Live-Einsatzstatus aktivieren. Bei neuen und laufenden Einsätzen zeigt die App eine aktuelle Dauerbenachrichtigung.</label>
     </div>
     <button onclick="openAccountLogin()">Mit Account anmelden</button>
     <div class="divider"><span>oder Geräte-Login</span></div>
@@ -155,6 +155,17 @@ waitForCapacitor(async () => {
   // hierher zurück (lokale Seite, garantierter Bridge-Zugriff), wo er jetzt
   // zuverlässig abgelegt wird.
   const pinParams = new URLSearchParams(window.location.search);
+  if (pinParams.get('native_logout') === '1') {
+    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (DevKA) { try { await DevKA.stopKeepalive(); } catch (_) {} }
+    await Promise.all([
+      Preferences.remove({ key: 'el_device_token' }),
+      Preferences.set({ key: 'el_live_enabled', value: '0' }),
+      Preferences.remove({ key: 'el_used_account_login' }),
+    ]);
+    window.location.replace('https://einsatzcockpit.com/logout');
+    return;
+  }
   const pinToken = pinParams.get('pin_device_token');
   if (pinToken) {
     setStatus('Anmelden…');
@@ -293,6 +304,9 @@ async function openAccountLogin() {
     if (enabled) {
       const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
       if (DevKA) await DevKA.startKeepalive();
+    } else {
+      const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+      if (DevKA) await DevKA.stopKeepalive();
     }
   } catch (_) { /* Merken ist best-effort, Login funktioniert trotzdem */ }
   const fcmToken = await registerPushToken();
@@ -306,6 +320,9 @@ async function finishAccountLiveChoice(enabled) {
     if (enabled) {
       const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
       if (DevKA) await DevKA.startKeepalive();
+    } else {
+      const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+      if (DevKA) await DevKA.stopKeepalive();
     }
   } catch (_) { /* Navigation bleibt auch ohne native Brücke möglich */ }
   setStatus('Anmelden…');
