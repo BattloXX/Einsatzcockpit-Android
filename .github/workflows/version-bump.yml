@@ -1,5 +1,10 @@
 name: Version Bump nach Release
 
+# Fallback fuer manuell (im Browser) veroeffentlichte Releases. Der uebliche
+# Fall - ein per Tag-Push ausgeloester, signierter Release-Build - bumpt die
+# Version direkt am Ende von build-apk.yml: ein per GITHUB_TOKEN erstelltes
+# Release loest laut GitHub keine "release: published"-Folge-Workflows aus,
+# dieser Workflow wuerde in dem Fall also nie feuern.
 on:
   release:
     types: [published]

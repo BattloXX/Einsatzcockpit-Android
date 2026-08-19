@@ -245,3 +245,51 @@ jobs:
             Beim ersten Start im Gateway-Modus erscheint ein Hinweis zur
             **Akku-Optimierung**. Bitte deaktivieren, damit die Verbindung
             dauerhaft bestehen bleibt und keine SMS verloren gehen.
+
+      - name: Version auf main bumpen (nach Release)
+        # Läuft nur bei Tag-Builds mit Keystore, direkt im Anschluss an die
+        # Release-Erstellung oben. Grund für den Inline-Schritt statt des
+        # separaten version-bump.yml-Workflows: Ein per GITHUB_TOKEN erstelltes
+        # Release löst laut GitHub keine Folge-Workflows aus ("release:
+        # published" feuert dort nicht) - version-bump.yml blieb dadurch nach
+        # jedem CI-Release wirkungslos stehen. version-bump.yml bleibt als
+        # Fallback für manuell (im Browser) veröffentlichte Releases bestehen,
+        # dort greift die GITHUB_TOKEN-Einschränkung nicht.
+        if: ${{ startsWith(github.ref, 'refs/tags/') && env.HAS_KEYSTORE == 'true' }}
+        run: |
+          python3 - <<'EOF'
+          import datetime
+          import json
+          import sys
+
+          with open("package.json", encoding="utf-8") as f:
+              package = json.load(f)
+          old_ver = package.get("version", "")
+          today = datetime.date.today().strftime("%Y.%m.%d")
+          if old_ver == today:
+              new_ver = f"{today}.1"
+          elif old_ver.startswith(f"{today}."):
+              suffix = old_ver.removeprefix(f"{today}.")
+              if not suffix.isdigit():
+                  sys.exit(f"Ungueltiger CalVer-Suffix: {old_ver}")
+              new_ver = f"{today}.{int(suffix) + 1}"
+          else:
+              new_ver = today
+          print(f"Bump: {old_ver} -> {new_ver}")
+
+          for path in ("package.json", "package-lock.json"):
+              with open(path, encoding="utf-8") as f:
+                  data = json.load(f)
+              data["version"] = new_ver
+              if path == "package-lock.json":
+                  data["packages"][""]["version"] = new_ver
+              with open(path, "w", encoding="utf-8") as f:
+                  json.dump(data, f, ensure_ascii=False, indent=2)
+                  f.write("\n")
+          EOF
+          V=$(node -p "require('./package.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: Version auf ${V} aktualisieren (nach Release)"
+          git push origin HEAD:main
