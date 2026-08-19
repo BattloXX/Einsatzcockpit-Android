@@ -21,6 +21,7 @@ class DeviceKeepalivePlugin : Plugin() {
 
     @PluginMethod
     fun startKeepalive(call: PluginCall) {
+        ObjektOfflineSyncWorker.schedule(context)
         val intent = Intent(context, DeviceKeepaliveService::class.java).apply {
             action = DeviceKeepaliveService.ACTION_START
         }
