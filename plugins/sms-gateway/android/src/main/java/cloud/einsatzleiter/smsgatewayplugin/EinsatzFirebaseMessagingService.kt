@@ -7,6 +7,16 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import org.json.JSONObject
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 /** Empfaengt FCM-Data-Nachrichten auch bei beendeter WebView. */
 class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
@@ -14,6 +24,11 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         private const val GENERIC_CHANNEL_ID = "ec_push"
         private const val GENERIC_NOTIFICATION_ID = 7305
         const val ALARM_FALLBACK_NOTIFICATION_ID = 7306
+        private val ackClient = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .build()
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -26,6 +41,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 data["url"].orEmpty(),
                 ALARM_FALLBACK_NOTIFICATION_ID,
             )
+            data["delivery_id"]?.takeIf { it.isNotBlank() }?.let { sendPushAck(it) }
         }
 
         val refresh = Intent(this, DeviceKeepaliveService::class.java).apply {
@@ -79,6 +95,48 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
             .apply { pendingIntent?.let { setContentIntent(it) } }
             .build()
         manager.notify(notificationId, notification)
+    }
+
+    private fun sendPushAck(deliveryId: String) {
+        try {
+            val prefs = getSharedPreferences("CapacitorStorage", MODE_PRIVATE)
+            val baseUrl = prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null)?.trimEnd('/')
+            val deviceToken = prefs.getString("el_device_token", null)?.takeIf { it.isNotBlank() }
+            if (baseUrl.isNullOrBlank() || deviceToken == null) {
+                SmsGatewayService.log("Push-Zustellbestaetigung nicht gesendet: Server-URL/Device-Token fehlt")
+                return
+            }
+            val body = JSONObject()
+                .put("delivery_id", deliveryId)
+                .toString()
+                .toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("$baseUrl/api/v1/device/push-ack")
+                .header("Authorization", "Bearer $deviceToken")
+                .post(body)
+                .build()
+            ackClient.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    SmsGatewayService.log(
+                        "Push-Zustellbestaetigung fehlgeschlagen: ${e.javaClass.simpleName}",
+                    )
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        if (!it.isSuccessful) {
+                            SmsGatewayService.log(
+                                "Push-Zustellbestaetigung fehlgeschlagen (HTTP ${it.code})",
+                            )
+                        }
+                    }
+                }
+            })
+        } catch (e: Exception) {
+            SmsGatewayService.log(
+                "Push-Zustellbestaetigung nicht startbar: ${e.javaClass.simpleName}",
+            )
+        }
     }
 
     private fun absoluteUrl(url: String): String {

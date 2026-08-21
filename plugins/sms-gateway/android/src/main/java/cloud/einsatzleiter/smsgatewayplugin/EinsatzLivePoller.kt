@@ -126,8 +126,13 @@ class EinsatzLivePoller(
             log("Live-Poll ohne Device-Token; bestehende Session-Authentifizierung wird verwendet")
         }
         log("Live-Poll wird versucht")
+        val deviceToken = prefs.getString("el_device_token", null)?.takeIf { it.isNotBlank() }
         val request = try {
-            Request.Builder().url("$baseUrl/api/v1/device/duty-state").get().build()
+            Request.Builder()
+                .url("$baseUrl/api/v1/device/duty-state")
+                .get()
+                .apply { deviceToken?.let { header("Authorization", "Bearer $it") } }
+                .build()
         } catch (_: IllegalArgumentException) {
             log("Live-Poll ausgesetzt: Server-URL ist ungültig")
             schedule(IDLE_INTERVAL_MS)
