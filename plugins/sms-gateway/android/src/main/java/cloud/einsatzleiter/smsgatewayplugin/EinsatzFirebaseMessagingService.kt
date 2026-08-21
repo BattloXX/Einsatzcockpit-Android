@@ -13,28 +13,48 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
         private const val GENERIC_CHANNEL_ID = "ec_push"
         private const val GENERIC_NOTIFICATION_ID = 7305
+        const val ALARM_FALLBACK_NOTIFICATION_ID = 7306
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
-        val refresh = Intent(this, DeviceKeepaliveService::class.java).apply {
-            action = DeviceKeepaliveService.ACTION_LIVE_REFRESH
-        }
-        startForegroundService(refresh)
-
-        // Einsatzalarme werden nach dem sofortigen Poll als konsistente
-        // "Laufender Einsatz"-Notification dargestellt. Andere Meldungen
-        // brauchen weiterhin eine eigene, antippbare Systembenachrichtigung.
-        if (data["channel_id"] != "einsatz_alarm") {
+        val isAlarm = data["channel_id"] == "einsatz_alarm"
+        if (isAlarm) {
             postGenericNotification(
                 data["title"].orEmpty(),
                 data["body"].orEmpty(),
                 data["url"].orEmpty(),
+                ALARM_FALLBACK_NOTIFICATION_ID,
+            )
+        }
+
+        val refresh = Intent(this, DeviceKeepaliveService::class.java).apply {
+            action = DeviceKeepaliveService.ACTION_LIVE_REFRESH
+        }
+        try {
+            startForegroundService(refresh)
+        } catch (e: SecurityException) {
+            SmsGatewayService.log("Live-Aktualisierung nach FCM nicht startbar: ${e.javaClass.simpleName}")
+        } catch (e: IllegalStateException) {
+            // Schließt ForegroundServiceStartNotAllowedException ab Android 12 ein.
+            // Die Fallback-Notification bleibt sichtbar.
+            SmsGatewayService.log("Live-Aktualisierung nach FCM nicht startbar: ${e.javaClass.simpleName}")
+        }
+
+        // Einsatzalarme werden nach dem sofortigen Poll als konsistente
+        // "Laufender Einsatz"-Notification dargestellt. Andere Meldungen
+        // brauchen weiterhin eine eigene, antippbare Systembenachrichtigung.
+        if (!isAlarm) {
+            postGenericNotification(
+                data["title"].orEmpty(),
+                data["body"].orEmpty(),
+                data["url"].orEmpty(),
+                GENERIC_NOTIFICATION_ID,
             )
         }
     }
 
-    private fun postGenericNotification(title: String, body: String, url: String) {
+    private fun postGenericNotification(title: String, body: String, url: String, notificationId: Int) {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(
             GENERIC_CHANNEL_ID,
@@ -47,7 +67,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         }
         val pendingIntent = launchIntent?.let {
             PendingIntent.getActivity(
-                this, GENERIC_NOTIFICATION_ID, it,
+                this, notificationId, it,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         }
@@ -58,7 +78,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .apply { pendingIntent?.let { setContentIntent(it) } }
             .build()
-        manager.notify(GENERIC_NOTIFICATION_ID, notification)
+        manager.notify(notificationId, notification)
     }
 
     private fun absoluteUrl(url: String): String {

@@ -71,7 +71,11 @@ class EinsatzLivePoller(
     }
 
     fun start() {
-        if (running || !isEnabled()) return
+        if (running) return
+        if (!isEnabled()) {
+            log("Live-Poller nicht gestartet: Device-Token/Live-Opt-in fehlt")
+            return
+        }
         running = true
         try { connectivityManager.registerDefaultNetworkCallback(networkCallback) } catch (_: Exception) {}
         schedule(INITIAL_DELAY_MS)
@@ -91,7 +95,11 @@ class EinsatzLivePoller(
     }
 
     fun refreshNow() {
-        if (!running || !isEnabled()) return
+        if (!running) return
+        if (!isEnabled()) {
+            log("Live-Poll abgebrochen: Device-Token/Live-Opt-in fehlt")
+            return
+        }
         handler.removeCallbacks(pollRunnable)
         handler.post(pollRunnable)
     }
@@ -103,18 +111,25 @@ class EinsatzLivePoller(
     private fun poll() {
         if (!running || inFlight != null) return
         if (!isEnabled()) {
+            log("Live-Poll beendet: Device-Token/Live-Opt-in fehlt")
             clearIncident()
             stop()
             return
         }
         val baseUrl = prefs.getString(PREF_BASE_URL, null)?.trimEnd('/')
         if (baseUrl.isNullOrBlank()) {
+            log("Live-Poll ausgesetzt: Server-URL fehlt")
             schedule(IDLE_INTERVAL_MS)
             return
         }
+        if (prefs.getString("el_device_token", null).isNullOrBlank()) {
+            log("Live-Poll ohne Device-Token; bestehende Session-Authentifizierung wird verwendet")
+        }
+        log("Live-Poll wird versucht")
         val request = try {
             Request.Builder().url("$baseUrl/api/v1/device/duty-state").get().build()
         } catch (_: IllegalArgumentException) {
+            log("Live-Poll ausgesetzt: Server-URL ist ungültig")
             schedule(IDLE_INTERVAL_MS)
             return
         }
@@ -135,7 +150,7 @@ class EinsatzLivePoller(
                             inFlight = null
                             if (!running) return@post
                             when {
-                                code == 401 || code == 403 -> handleAuthFailure()
+                                code == 401 || code == 403 -> handleAuthFailure(code)
                                 code in 200..299 && body != null -> handleSuccess(baseUrl, body)
                                 else -> handleNetworkFailure(baseUrl)
                             }
@@ -188,7 +203,8 @@ class EinsatzLivePoller(
         schedule(ACTIVE_INTERVAL_MS)
     }
 
-    private fun handleAuthFailure() {
+    private fun handleAuthFailure(statusCode: Int) {
+        log("Live-Poll Authentifizierung fehlgeschlagen (HTTP $statusCode)")
         failures = 0
         clearIncident()
         schedule(AUTH_INTERVAL_MS)
@@ -222,6 +238,8 @@ class EinsatzLivePoller(
         handler.removeCallbacks(pollRunnable)
         handler.postDelayed(pollRunnable, delayMs)
     }
+
+    private fun log(message: String) = SmsGatewayService.log(message)
 
     private fun formatTime(timestamp: Long): String =
         SimpleDateFormat("HH:mm", Locale.GERMANY).apply {
