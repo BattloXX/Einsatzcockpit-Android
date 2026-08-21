@@ -39,6 +39,7 @@ class EinsatzLiveNotifier(private val context: Context) {
             .getString(EinsatzLivePoller.PREF_DISMISSED_INCIDENT_ID, null)
         if (dismissed == state.id.toString()) return
         manager.notify(NOTIFICATION_ID, buildTier1(state, baseUrl, staleText).build())
+        manager.cancel(EinsatzFirebaseMessagingService.ALARM_FALLBACK_NOTIFICATION_ID)
     }
 
     fun cancel() = manager.cancel(NOTIFICATION_ID)
