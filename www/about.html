@@ -315,10 +315,9 @@ document.addEventListener('visibilitychange', async () => {
 });
 
 // ── Push-Benachrichtigungen (FCM) ─────────────────────────────────────────────
-// Zeigt nur den lokalen OS-Berechtigungsstatus - ob der Server tatsaechlich
-// einen Token fuer dieses Geraet gespeichert hat, laesst sich von dieser Seite
-// aus nicht abfragen (anderer Origin als einsatzcockpit.com, keine Session-
-// Cookies hier). Der "Push jetzt registrieren"-Button ist der verlaessliche Weg.
+// Zeigt den lokalen OS-Berechtigungsstatus. Die Registrierung beim Server laeuft
+// ueber das native DeviceKeepalive-Plugin mit dem gespeicherten Device-Token,
+// weil diese Seite keine Session-Cookies von einsatzcockpit.com besitzt.
 // Anders als im stillen Login-Flow darf der erste Token-Abruf hier auf langsamen
 // Geraeten bzw. Verbindungen ausreichend lange auf Google Play Services warten.
 const PUSH_TIMEOUT_MS = 30000;
@@ -402,16 +401,20 @@ async function registerPushAndContinue() {
       toast('Registrierung fehlgeschlagen oder Berechtigung verweigert.');
       return;
     }
-    toast('Push registriert – wird mit dem Konto verknüpft…');
-    // Backend liest fcm_token zentral in main.py::session_middleware fuer JEDEN
-    // authentifizierten Request - dieselbe Route wie der stille Rueckkehr-Redirect
-    // in index.html.
+    const DeviceKeepalive = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (!DeviceKeepalive?.registerFcmToken) {
+      throw new Error('Native Server-Registrierung ist nicht verfügbar.');
+    }
+    await DeviceKeepalive.registerFcmToken({ token });
+    toast('✅ Push-Benachrichtigungen aktiviert.');
+    // Der Redirect bleibt fuer den bestehenden WebView-PWA-Handoff erhalten.
     setTimeout(() => {
       window.location.replace(
         'https://einsatzcockpit.com/?native=1&fcm_token=' + encodeURIComponent(token));
     }, 900);
   } catch (e) {
-    toast(e?.message || 'Push-Registrierung fehlgeschlagen. Bitte erneut versuchen.');
+    console.warn('[Push] Server-Registrierung fehlgeschlagen:', e);
+    toast('❌ Registrierung beim Server fehlgeschlagen. Bitte erneut versuchen.');
   } finally {
     btn.disabled = false;
     btn.textContent = prev;

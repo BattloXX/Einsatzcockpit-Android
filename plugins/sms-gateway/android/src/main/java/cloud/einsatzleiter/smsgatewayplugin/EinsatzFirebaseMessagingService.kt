@@ -10,13 +10,11 @@ import com.google.firebase.messaging.RemoteMessage
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONObject
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 /** Empfaengt FCM-Data-Nachrichten auch bei beendeter WebView. */
 class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
@@ -24,11 +22,14 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         private const val GENERIC_CHANNEL_ID = "ec_push"
         private const val GENERIC_NOTIFICATION_ID = 7305
         const val ALARM_FALLBACK_NOTIFICATION_ID = 7306
-        private val ackClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .build()
+    }
+
+    override fun onNewToken(token: String) {
+        FcmTokenRegistration.post(this, token) { result ->
+            result.exceptionOrNull()?.let {
+                SmsGatewayService.log("FCM-Token-Aktualisierung fehlgeschlagen: ${it.message ?: it.javaClass.simpleName}")
+            }
+        }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -40,6 +41,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 data["body"].orEmpty(),
                 data["url"].orEmpty(),
                 ALARM_FALLBACK_NOTIFICATION_ID,
+                AlarmNotificationChannel.CHANNEL_ID,
             )
             data["delivery_id"]?.takeIf { it.isNotBlank() }?.let { sendPushAck(it) }
         }
@@ -70,13 +72,23 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    private fun postGenericNotification(title: String, body: String, url: String, notificationId: Int) {
+    private fun postGenericNotification(
+        title: String,
+        body: String,
+        url: String,
+        notificationId: Int,
+        channelId: String = GENERIC_CHANNEL_ID,
+    ) {
         val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(
-            GENERIC_CHANNEL_ID,
-            "Einsatzcockpit-Meldungen",
-            NotificationManager.IMPORTANCE_DEFAULT,
-        ))
+        if (channelId == AlarmNotificationChannel.CHANNEL_ID) {
+            AlarmNotificationChannel.create(this)
+        } else {
+            manager.createNotificationChannel(NotificationChannel(
+                GENERIC_CHANNEL_ID,
+                "Einsatzcockpit-Meldungen",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ))
+        }
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra(EinsatzLiveNotifier.EXTRA_EC_URL, absoluteUrl(url))
@@ -87,7 +99,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         }
-        val notification = NotificationCompat.Builder(this, GENERIC_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_ec_live)
             .setContentTitle(title.ifBlank { "Einsatzcockpit" })
             .setContentText(body)
@@ -115,7 +127,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 .header("Authorization", "Bearer $deviceToken")
                 .post(body)
                 .build()
-            ackClient.newCall(request).enqueue(object : Callback {
+            FcmTokenRegistration.httpClient.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
                     SmsGatewayService.log(
                         "Push-Zustellbestaetigung fehlgeschlagen: ${e.javaClass.simpleName}",

@@ -1,11 +1,8 @@
 package cloud.einsatzleiter.smsgatewayplugin
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
@@ -29,7 +26,7 @@ class AlarmChannelPlugin : Plugin() {
     fun setEnabled(call: PluginCall) {
         val enabled = call.getBoolean("enabled") ?: return call.reject("enabled erforderlich")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (enabled) createChannel() else notificationManager.deleteNotificationChannel(CHANNEL_ID)
+            if (enabled) AlarmNotificationChannel.create(context) else notificationManager.deleteNotificationChannel(CHANNEL_ID)
         }
         call.resolve(status())
     }
@@ -80,26 +77,8 @@ class AlarmChannelPlugin : Plugin() {
         put("dndPermission", notificationManager.isNotificationPolicyAccessGranted)
     }
 
-    private fun createChannel() {
-        notificationManager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Einsatzalarm (übersteuert Lautlos)", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Akustischer Alarm bei neuen Einsätzen, auch wenn das Gerät auf Vibration oder lautlos steht."
-                setSound(
-                    Uri.parse("android.resource://${context.packageName}/raw/einsatz_alarm"),
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
-                enableVibration(true)
-                enableLights(true)
-                setBypassDnd(true)
-            }
-        )
-    }
-
     companion object {
-        private const val CHANNEL_ID = "einsatz_alarm"
+        private const val CHANNEL_ID = AlarmNotificationChannel.CHANNEL_ID
         private const val TEST_NOTIFICATION_ID = 42001
     }
 }
