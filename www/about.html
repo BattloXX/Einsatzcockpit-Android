@@ -414,7 +414,7 @@ async function registerPushAndContinue() {
     }, 900);
   } catch (e) {
     console.warn('[Push] Server-Registrierung fehlgeschlagen:', e);
-    toast('❌ Registrierung beim Server fehlgeschlagen. Bitte erneut versuchen.');
+    toast('❌ Registrierung fehlgeschlagen: ' + (e?.message || 'unbekannter Fehler') + ' — bitte erneut versuchen.');
   } finally {
     btn.disabled = false;
     btn.textContent = prev;
