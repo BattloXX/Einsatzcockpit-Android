@@ -20,6 +20,18 @@ import com.getcapacitor.annotation.CapacitorPlugin
 class DeviceKeepalivePlugin : Plugin() {
 
     @PluginMethod
+    fun registerFcmToken(call: PluginCall) {
+        val token = call.getString("token")?.takeIf { it.isNotBlank() }
+            ?: return call.reject("token erforderlich")
+        FcmTokenRegistration.post(context, token) { result ->
+            result.fold(
+                onSuccess = { call.resolve() },
+                onFailure = { call.reject(it.message ?: "FCM-Token konnte nicht registriert werden") },
+            )
+        }
+    }
+
+    @PluginMethod
     fun startKeepalive(call: PluginCall) {
         ObjektOfflineSyncWorker.schedule(context)
         val intent = Intent(context, DeviceKeepaliveService::class.java).apply {
