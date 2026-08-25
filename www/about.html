@@ -149,6 +149,12 @@
       Nach der Registrierung wirst du kurz zur App weitergeleitet, um sie mit deinem
       Konto zu verknüpfen.
     </p>
+    <p id="pushSetupHint" style="display:none;font-size:.82rem;color:var(--muted);margin-top:10px;">
+      Tippe auf „Push jetzt registrieren“, um dieses Gerät beim Server einzurichten.
+    </p>
+    <p id="pushDeliveryWarning" style="display:none;font-size:.82rem;color:var(--yellow);margin-top:10px;">
+      Der letzte Zustellversuch ist fehlgeschlagen.
+    </p>
     <div style="margin-top:10px;">
       <button class="btn-primary" style="width:100%;" id="btnRegisterPush" onclick="registerPushAndContinue()">
         🔔 Push jetzt registrieren
@@ -315,16 +321,20 @@ document.addEventListener('visibilitychange', async () => {
 });
 
 // ── Push-Benachrichtigungen (FCM) ─────────────────────────────────────────────
-// Zeigt den lokalen OS-Berechtigungsstatus. Die Registrierung beim Server laeuft
-// ueber das native DeviceKeepalive-Plugin mit dem gespeicherten Device-Token,
-// weil diese Seite keine Session-Cookies von einsatzcockpit.com besitzt.
+// Zeigt den lokalen OS-Berechtigungsstatus und bestaetigt die Registrierung beim
+// Server ueber das native DeviceKeepalive-Plugin. Der aktuelle Firebase-Token
+// wird dabei ohne Berechtigungsdialog und ohne neue Push-Registrierung gelesen.
 // Anders als im stillen Login-Flow darf der erste Token-Abruf hier auf langsamen
 // Geraeten bzw. Verbindungen ausreichend lange auf Google Play Services warten.
 const PUSH_TIMEOUT_MS = 30000;
 
 async function updatePushStatusBadge() {
   const badge = document.getElementById('pushStatusBadge');
+  const setupHint = document.getElementById('pushSetupHint');
+  const deliveryWarning = document.getElementById('pushDeliveryWarning');
   if (!badge) return;
+  setupHint.style.display = 'none';
+  deliveryWarning.style.display = 'none';
   const PushNotifications = window.Capacitor?.Plugins?.PushNotifications;
   if (!PushNotifications || !PushNotifications.checkPermissions) {
     badge.textContent = 'unbekannt';
@@ -333,14 +343,28 @@ async function updatePushStatusBadge() {
   try {
     const perm = await PushNotifications.checkPermissions();
     if (perm.receive === 'granted') {
-      badge.textContent = 'Erlaubt';
-      badge.className = 'badge-soft on';
+      const DeviceKeepalive = window.Capacitor?.Plugins?.DeviceKeepalive;
+      if (!DeviceKeepalive?.getPushToken || !DeviceKeepalive?.getPushStatus) {
+        throw new Error('Native Push-Statusprüfung ist nicht verfügbar.');
+      }
+      const { token } = await DeviceKeepalive.getPushToken();
+      const status = await DeviceKeepalive.getPushStatus({ token });
+      if (status.registered === true) {
+        badge.textContent = 'Eingerichtet';
+        badge.className = 'badge-soft on';
+        deliveryWarning.style.display = status.last_delivery_success === false ? '' : 'none';
+      } else {
+        badge.textContent = 'Erlaubt, aber nicht eingerichtet';
+        badge.className = 'badge-soft off';
+        setupHint.style.display = '';
+      }
     } else {
       badge.textContent = 'Nicht erlaubt';
       badge.className = 'badge-soft off';
     }
   } catch (_) {
-    badge.textContent = 'unbekannt';
+    badge.textContent = 'Status unbekannt';
+    badge.className = 'badge-soft';
   }
 }
 
@@ -396,7 +420,6 @@ async function registerPushAndContinue() {
   btn.textContent = '⏳ Registriere…';
   try {
     const token = await fetchFcmToken();
-    await updatePushStatusBadge();
     if (!token) {
       toast('Registrierung fehlgeschlagen oder Berechtigung verweigert.');
       return;
@@ -406,6 +429,7 @@ async function registerPushAndContinue() {
       throw new Error('Native Server-Registrierung ist nicht verfügbar.');
     }
     await DeviceKeepalive.registerFcmToken({ token });
+    await updatePushStatusBadge();
     toast('✅ Push-Benachrichtigungen aktiviert.');
     // Der Redirect bleibt fuer den bestehenden WebView-PWA-Handoff erhalten.
     setTimeout(() => {
