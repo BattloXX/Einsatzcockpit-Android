@@ -113,9 +113,15 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         try {
             val prefs = getSharedPreferences("CapacitorStorage", MODE_PRIVATE)
             val baseUrl = prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null)?.trimEnd('/')
-            val deviceToken = prefs.getString("el_device_token", null)?.takeIf { it.isNotBlank() }
-            if (baseUrl.isNullOrBlank() || deviceToken == null) {
-                SmsGatewayService.log("Push-Zustellbestaetigung nicht gesendet: Server-URL/Device-Token fehlt")
+            if (baseUrl.isNullOrBlank()) {
+                SmsGatewayService.log("Push-Zustellbestaetigung nicht gesendet: Server-URL fehlt")
+                return
+            }
+            val authHeader = FcmTokenRegistration.getAuthHeader(this, baseUrl)
+            if (authHeader == null) {
+                SmsGatewayService.log(
+                    "Push-Zustellbestaetigung nicht gesendet: Keine Anmeldung gefunden",
+                )
                 return
             }
             val body = JSONObject()
@@ -124,7 +130,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 .toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
                 .url("$baseUrl/api/v1/device/push-ack")
-                .header("Authorization", "Bearer $deviceToken")
+                .header(authHeader.first, authHeader.second)
                 .post(body)
                 .build()
             FcmTokenRegistration.httpClient.newCall(request).enqueue(object : Callback {
