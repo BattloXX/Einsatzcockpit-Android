@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import okhttp3.Call
@@ -35,7 +36,13 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
         val isAlarm = data["channel_id"] == "einsatz_alarm"
-        if (isAlarm) {
+        val isSilentWake = data["silent"] == "1"
+        data["delivery_id"]?.takeIf { it.isNotBlank() }?.let { sendPushAck(it) }
+
+        if (isSilentWake) {
+            SmsGatewayService.log("FCM empfangen: silent (Poller + Ack, keine eigene Anzeige)")
+        } else if (isAlarm) {
+            SmsGatewayService.log("FCM empfangen: display (Alarm-Fallback)")
             postGenericNotification(
                 data["title"].orEmpty(),
                 data["body"].orEmpty(),
@@ -43,7 +50,8 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 ALARM_FALLBACK_NOTIFICATION_ID,
                 AlarmNotificationChannel.CHANNEL_ID,
             )
-            data["delivery_id"]?.takeIf { it.isNotBlank() }?.let { sendPushAck(it) }
+        } else {
+            SmsGatewayService.log("FCM empfangen: generic")
         }
 
         val refresh = Intent(this, DeviceKeepaliveService::class.java).apply {
@@ -62,7 +70,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         // Einsatzalarme werden nach dem sofortigen Poll als konsistente
         // "Laufender Einsatz"-Notification dargestellt. Andere Meldungen
         // brauchen weiterhin eine eigene, antippbare Systembenachrichtigung.
-        if (!isAlarm) {
+        if (!isSilentWake && !isAlarm) {
             postGenericNotification(
                 data["title"].orEmpty(),
                 data["body"].orEmpty(),
@@ -79,6 +87,10 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         notificationId: Int,
         channelId: String = GENERIC_CHANNEL_ID,
     ) {
+        if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            SmsGatewayService.log("FCM-Anzeige nicht moeglich: Benachrichtigungen sind nicht erlaubt")
+            return
+        }
         val manager = getSystemService(NotificationManager::class.java)
         if (channelId == AlarmNotificationChannel.CHANNEL_ID) {
             AlarmNotificationChannel.create(this)
@@ -106,7 +118,11 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .apply { pendingIntent?.let { setContentIntent(it) } }
             .build()
-        manager.notify(notificationId, notification)
+        try {
+            manager.notify(notificationId, notification)
+        } catch (e: SecurityException) {
+            SmsGatewayService.log("FCM-Anzeige nicht moeglich: POST_NOTIFICATIONS fehlt")
+        }
     }
 
     private fun sendPushAck(deliveryId: String) {
