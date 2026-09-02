@@ -250,8 +250,13 @@ async function updateAlarmStatus() {
     dnd.checked = status.dndBypass;
     dnd.disabled = !status.enabled;
     document.getElementById('btnAlarmTest').disabled = !status.enabled;
-    badge.textContent = status.enabled ? (status.dndBypass ? 'Aktiv · DND übergangen' : 'Aktiv') : 'Aus';
-    badge.className = 'badge-soft ' + (status.enabled ? 'on' : 'off');
+    if (!status.notificationsGranted) {
+      badge.textContent = 'Benachrichtigungen nicht erlaubt';
+      badge.className = 'badge-soft off';
+    } else {
+      badge.textContent = status.enabled ? (status.dndBypass ? 'Aktiv · DND übergangen' : 'Aktiv') : 'Aus';
+      badge.className = 'badge-soft ' + (status.enabled ? 'on' : 'off');
+    }
     await Preferences?.set({ key: 'el_alarm_override_silent', value: status.enabled ? '1' : '0' });
   } catch (_) {
     document.getElementById('alarmStatusBadge').textContent = 'unbekannt';

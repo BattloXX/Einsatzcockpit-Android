@@ -33,6 +33,10 @@ class AlarmChannelPlugin : Plugin() {
 
     @PluginMethod
     fun playTestNotification(call: PluginCall) {
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            call.reject("Benachrichtigungen sind nicht erlaubt")
+            return
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
             call.reject("Alarmkanal ist nicht aktiviert")
             return
@@ -44,7 +48,12 @@ class AlarmChannelPlugin : Plugin() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()
-        NotificationManagerCompat.from(context).notify(TEST_NOTIFICATION_ID, notification)
+        try {
+            NotificationManagerCompat.from(context).notify(TEST_NOTIFICATION_ID, notification)
+        } catch (_: SecurityException) {
+            call.reject("POST_NOTIFICATIONS ist nicht erteilt")
+            return
+        }
         call.resolve()
     }
 
@@ -73,7 +82,8 @@ class AlarmChannelPlugin : Plugin() {
         val channel = if (supported) notificationManager.getNotificationChannel(CHANNEL_ID) else null
         put("supported", supported)
         put("enabled", channel != null)
-        put("dndBypass", channel?.canBypassDnd() == true)
+        put("notificationsGranted", NotificationManagerCompat.from(context).areNotificationsEnabled())
+        put("dndBypass", supported && channel?.canBypassDnd() == true)
         put("dndPermission", notificationManager.isNotificationPolicyAccessGranted)
     }
 

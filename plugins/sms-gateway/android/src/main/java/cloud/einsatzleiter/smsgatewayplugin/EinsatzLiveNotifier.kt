@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 
 class EinsatzLiveNotifier(private val context: Context) {
     companion object {
@@ -38,8 +39,17 @@ class EinsatzLiveNotifier(private val context: Context) {
         val dismissed = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
             .getString(EinsatzLivePoller.PREF_DISMISSED_INCIDENT_ID, null)
         if (dismissed == state.id.toString()) return
-        manager.notify(NOTIFICATION_ID, buildTier1(state, baseUrl, staleText).build())
-        manager.cancel(EinsatzFirebaseMessagingService.ALARM_FALLBACK_NOTIFICATION_ID)
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            SmsGatewayService.log("Live-Einsatzanzeige nicht moeglich: Benachrichtigungen sind nicht erlaubt")
+            return
+        }
+        try {
+            manager.notify(NOTIFICATION_ID, buildTier1(state, baseUrl, staleText).build())
+            // Erst entfernen, nachdem die laufende Einsatzanzeige erfolgreich gepostet wurde.
+            manager.cancel(EinsatzFirebaseMessagingService.ALARM_FALLBACK_NOTIFICATION_ID)
+        } catch (_: SecurityException) {
+            SmsGatewayService.log("Live-Einsatzanzeige nicht moeglich: POST_NOTIFICATIONS fehlt")
+        }
     }
 
     fun cancel() = manager.cancel(NOTIFICATION_ID)
