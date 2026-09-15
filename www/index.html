@@ -158,6 +158,7 @@ waitForCapacitor(async () => {
   if (pinParams.get('native_logout') === '1') {
     const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
     if (DevKA) { try { await DevKA.stopKeepalive(); } catch (_) {} }
+    if (DevKA) { try { await DevKA.wipeKontakte(); } catch (_) {} }
     await Promise.all([
       Preferences.remove({ key: 'el_device_token' }),
       Preferences.set({ key: 'el_live_enabled', value: '0' }),
@@ -308,6 +309,8 @@ async function openAccountLogin() {
       const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
       if (DevKA) await DevKA.stopKeepalive();
     }
+    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (DevKA) await DevKA.scheduleKontaktSync();
   } catch (_) { /* Merken ist best-effort, Login funktioniert trotzdem */ }
   const fcmToken = await registerPushToken();
   window.location.replace(withFcmParam('https://einsatzcockpit.com/login?native=1', fcmToken));
@@ -324,6 +327,8 @@ async function finishAccountLiveChoice(enabled) {
       const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
       if (DevKA) await DevKA.stopKeepalive();
     }
+    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (DevKA) await DevKA.scheduleKontaktSync();
   } catch (_) { /* Navigation bleibt auch ohne native Brücke möglich */ }
   setStatus('Anmelden…');
   document.getElementById('liveOptInCard').style.display = 'none';
