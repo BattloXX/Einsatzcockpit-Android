@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
  *   DeviceKeepalive.registerFcmToken() – registriert den aktuellen FCM-Token beim Server
  *   DeviceKeepalive.getPushToken()     – liest den aktuellen FCM-Token ohne Berechtigungsdialog
  *   DeviceKeepalive.getPushStatus()    – prüft die Registrierung des FCM-Tokens beim Server
+ *   DeviceKeepalive.openOfflineKontakte() – öffnet die native Offline-Kontaktansicht
  *
  * Wird bei App-Start reaktiv aufgerufen; der Service beendet sich nach einer
  * Leerlauffrist selbst, sofern weder Einsatz noch Dienst aktiv sind.
@@ -100,6 +101,15 @@ class DeviceKeepalivePlugin : Plugin() {
     fun scheduleKontaktSync(call: PluginCall) {
         KontaktOfflineSyncWorker.schedule(context)
         KontaktOfflineSyncWorker.triggerImmediateSync(context)
+        call.resolve()
+    }
+
+    /** Opens the native, locally stored contacts independently of the WebView. */
+    @PluginMethod
+    fun openOfflineKontakte(call: PluginCall) {
+        context.startActivity(Intent(context, KontaktListActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
         call.resolve()
     }
 
