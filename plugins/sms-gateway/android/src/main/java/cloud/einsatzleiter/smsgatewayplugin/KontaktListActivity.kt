@@ -75,7 +75,7 @@ class KontaktListActivity : AppCompatActivity() {
                 database.kontaktDao().searchByNumber(normalizeTelefonnummer(query)),
             ) { byName, byNumber ->
                 (byName + byNumber).distinctBy { it.id }
-                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.anzeigename }.thenBy { it.id })
+                    .sortedWith(compareBy({ it.anzeigename.lowercase() }, { it.id }))
             }
         }
         searchJob = screenScope.launch {
