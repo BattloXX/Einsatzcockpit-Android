@@ -40,6 +40,12 @@
 
     <application>
 
+        <provider
+            android:name="cloud.einsatzleiter.smsgatewayplugin.KontaktSyncForegroundProvider"
+            android:authorities="${applicationId}.kontakt-sync-foreground"
+            android:exported="false"
+            android:initOrder="100" />
+
         <!-- Pro FCM-Intent darf nur ein Service registriert sein. Der eigene
              Empfaenger ersetzt Capacitors Default, damit Data-Push den Poller weckt. -->
         <service

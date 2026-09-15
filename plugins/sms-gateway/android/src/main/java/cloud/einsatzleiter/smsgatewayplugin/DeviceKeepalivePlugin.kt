@@ -7,6 +7,11 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.google.firebase.messaging.FirebaseMessaging
+import cloud.einsatzleiter.smsgatewayplugin.kontakte.KontaktOfflineSyncWorker
+import cloud.einsatzleiter.smsgatewayplugin.kontakte.KontaktSyncEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * Capacitor-Plugin-Brücke zum DeviceKeepaliveService.
@@ -72,6 +77,8 @@ class DeviceKeepalivePlugin : Plugin() {
     @PluginMethod
     fun startKeepalive(call: PluginCall) {
         ObjektOfflineSyncWorker.schedule(context)
+        KontaktOfflineSyncWorker.schedule(context)
+        KontaktOfflineSyncWorker.triggerImmediateSync(context)
         val intent = Intent(context, DeviceKeepaliveService::class.java).apply {
             action = DeviceKeepaliveService.ACTION_START
         }
@@ -86,5 +93,26 @@ class DeviceKeepalivePlugin : Plugin() {
         }
         context.startService(intent)
         call.resolve()
+    }
+
+    /** Schedules contact sync without starting the live-status foreground service. */
+    @PluginMethod
+    fun scheduleKontaktSync(call: PluginCall) {
+        KontaktOfflineSyncWorker.schedule(context)
+        KontaktOfflineSyncWorker.triggerImmediateSync(context)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun wipeKontakte(call: PluginCall) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                KontaktSyncEngine().wipeLocalData(context)
+                KontaktOfflineSyncWorker.cancel(context)
+                call.resolve()
+            } catch (error: Exception) {
+                call.reject(error.message ?: "Kontakte konnten nicht gelöscht werden")
+            }
+        }
     }
 }

@@ -3,6 +3,7 @@ package cloud.einsatzleiter.smsgatewayplugin.kontakte
 import android.content.Context
 import androidx.room.withTransaction
 import cloud.einsatzleiter.smsgatewayplugin.EinsatzLivePoller
+import cloud.einsatzleiter.smsgatewayplugin.WebViewCookieJar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -13,12 +14,13 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * Fetches and persists the device contact feed. This class intentionally does not schedule itself;
+ * Fetches and persists the contact feed for either a WebView session or a paired device. This class intentionally does not schedule itself;
  * Phase C owns choosing when it is called.
  */
 class KontaktSyncEngine(
     private val databaseProvider: (Context) -> KontaktDatabase = { KontaktDatabase.get(it) },
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
+        .cookieJar(WebViewCookieJar())
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
@@ -32,8 +34,6 @@ class KontaktSyncEngine(
         val db = databaseProvider(appContext)
 
         if (baseUrl.isNullOrBlank()) return@withContext fail(db, "Server-URL fehlt")
-        if (token == null) return@withContext fail(db, "Device-Token fehlt")
-
         try {
             val status = db.syncStatusDao().get()
             if (status?.cursor == null || status?.orgId == null || status?.schemaVersion == null ||
@@ -62,7 +62,7 @@ class KontaktSyncEngine(
     private suspend fun syncSnapshot(
         db: KontaktDatabase,
         baseUrl: String,
-        token: String,
+        token: String?,
         previousStatus: KontaktSyncStatusEntity?,
     ) {
         val contacts = mutableListOf<KontaktPayload>()
@@ -116,7 +116,7 @@ class KontaktSyncEngine(
     private suspend fun syncDelta(
         db: KontaktDatabase,
         baseUrl: String,
-        token: String,
+        token: String?,
         initialStatus: KontaktSyncStatusEntity,
     ) {
         var requestCursor = checkNotNull(initialStatus.cursor)
@@ -162,7 +162,7 @@ class KontaktSyncEngine(
         }
     }
 
-    private fun fetch(baseUrl: String, token: String, cursor: Long? = null, pageAfter: Long? = null): JSONObject {
+    private fun fetch(baseUrl: String, token: String?, cursor: Long? = null, pageAfter: Long? = null): JSONObject {
         val url = buildString {
             append(baseUrl).append("/api/v1/device/kontakte/sync")
             when {
@@ -171,7 +171,9 @@ class KontaktSyncEngine(
             }
         }
         val request = try {
-            Request.Builder().url(url).get().header("Authorization", "Bearer $token").build()
+            Request.Builder().url(url).get().apply {
+                if (token != null) header("Authorization", "Bearer $token")
+            }.build()
         } catch (error: IllegalArgumentException) {
             throw SyncException("Ungültige Server-URL", error)
         }
