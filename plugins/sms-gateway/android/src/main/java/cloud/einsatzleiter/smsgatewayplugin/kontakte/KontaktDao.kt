@@ -7,6 +7,7 @@ import androidx.room.Query
 import androidx.room.Relation
 import androidx.room.Transaction
 import androidx.room.Upsert
+import kotlinx.coroutines.flow.Flow
 
 data class KontaktDetail(
     @androidx.room.Embedded val kontakt: KontaktEntity,
@@ -17,7 +18,10 @@ data class KontaktDetail(
 @Dao
 interface KontaktDao {
     @Query("SELECT * FROM kontakte ORDER BY anzeigename COLLATE NOCASE, id")
-    suspend fun list(): List<KontaktEntity>
+    fun list(): Flow<List<KontaktEntity>>
+
+    @Query("SELECT COUNT(*) FROM kontakte")
+    suspend fun count(): Int
 
     @Query("""
         SELECT * FROM kontakte
@@ -27,7 +31,7 @@ interface KontaktDao {
            OR organisation LIKE '%' || :query || '%'
         ORDER BY anzeigename COLLATE NOCASE, id
     """)
-    suspend fun searchByName(query: String): List<KontaktEntity>
+    fun searchByName(query: String): Flow<List<KontaktEntity>>
 
     @Query("""
         SELECT DISTINCT k.* FROM kontakte k
@@ -35,7 +39,7 @@ interface KontaktDao {
         WHERE t.nummer_normalisiert LIKE :normalizedQuery || '%'
         ORDER BY k.anzeigename COLLATE NOCASE, k.id
     """)
-    suspend fun searchByNumber(normalizedQuery: String): List<KontaktEntity>
+    fun searchByNumber(normalizedQuery: String): Flow<List<KontaktEntity>>
 
     @Transaction
     @Query("SELECT * FROM kontakte WHERE id = :kontaktId")

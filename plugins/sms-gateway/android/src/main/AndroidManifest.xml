@@ -40,6 +40,16 @@
 
     <application>
 
+        <activity
+            android:name="cloud.einsatzleiter.smsgatewayplugin.KontaktListActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
+
+        <activity
+            android:name="cloud.einsatzleiter.smsgatewayplugin.KontaktDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
+
         <provider
             android:name="cloud.einsatzleiter.smsgatewayplugin.KontaktSyncForegroundProvider"
             android:authorities="${applicationId}.kontakt-sync-foreground"
