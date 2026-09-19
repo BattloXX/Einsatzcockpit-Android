@@ -79,12 +79,27 @@ class AlarmChannelPlugin : Plugin() {
 
     private fun status() = JSObject().apply {
         val supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+        if (supported) reconcileBypassDnd()
         val channel = if (supported) notificationManager.getNotificationChannel(CHANNEL_ID) else null
         put("supported", supported)
         put("enabled", channel != null)
         put("notificationsGranted", NotificationManagerCompat.from(context).areNotificationsEnabled())
         put("dndBypass", supported && channel?.canBypassDnd() == true)
         put("dndPermission", notificationManager.isNotificationPolicyAccessGranted)
+    }
+
+    /**
+     * Die Eigenschaften eines angelegten Notification-Channels werden vom System
+     * beibehalten. Wird der DND-Zugriff erst danach gewaehrt, wird der beim Anlegen
+     * angeforderte Bypass nicht nachtraeglich auf den bestehenden Channel uebernommen.
+     * Den Channel deshalb mit der nun vorhandenen Berechtigung neu anlegen.
+     */
+    private fun reconcileBypassDnd() {
+        val channel = notificationManager.getNotificationChannel(CHANNEL_ID) ?: return
+        if (notificationManager.isNotificationPolicyAccessGranted && !channel.canBypassDnd()) {
+            notificationManager.deleteNotificationChannel(CHANNEL_ID)
+            AlarmNotificationChannel.create(context)
+        }
     }
 
     companion object {
