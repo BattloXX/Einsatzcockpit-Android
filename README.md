@@ -41,10 +41,21 @@ Android App (Capacitor, appId cloud.einsatzleiter.app)
     │      Leerlauf selbst — kein Dauerbetrieb ab Login
     ├─ EinsatzFirebaseMessagingService → empfängt FCM-Data-Messages auch bei
     │      beendeter App, weckt den Live-Poller sofort statt beim nächsten
-    │      Poll-Intervall, zeigt sonstige Pushes als eigene Notification
-    ├─ AlarmChannelPlugin → akustischer Alarmkanal (Sirenenton, DND-Bypass)
+    │      Poll-Intervall, zeigt sonstige Pushes als eigene Notification;
+    │      stößt bei Einsatz-Pushes zusätzlich EinsatzPreloadWorker an
+    ├─ EinsatzPreloadWorker → lädt die betroffene Einsatzseite bei einem
+    │      Einsatz-Push still in einer kurzlebigen WebView vor (niedrige
+    │      WorkManager-Priorität), damit der PWA-Service-Worker sie für den
+    │      Offline-Fall aktuell hält, auch ohne dass der Nutzer sie öffnet
+    ├─ AlarmChannelPlugin → akustischer Alarmkanal (Sirenenton, DND-Bypass;
+    │      legt den Kanal automatisch neu an, falls der DND-Zugriff erst
+    │      nachträglich gewährt wurde — Kanäle sind sonst unveränderlich)
     ├─ SmsGatewayPlugin/-Service → persistente WebSocket-Verbindung, eigener
-    │      Foreground-Service (specialUse) für SMS-Versand/-Empfang, 24/7
+    │      Foreground-Service (specialUse) für SMS-Versand/-Empfang, 24/7;
+    │      Watchdog erkennt hängende Verbindungsaufbauten und stumme
+    │      Verbindungen unabhängig von den OkHttp-Callbacks und erzwingt
+    │      dann einen Reconnect; App-seitiger Heartbeat alle 45s, da der
+    │      Server nie von sich aus pingt
     └─ BootReceiver → startet nach Neustart nur das dauerhaft konfigurierte
            SMS-Gateway neu; der Live-Status wird reaktiv (App-Start/FCM) geweckt
 
@@ -106,7 +117,7 @@ npx cap open android   # öffnet Android Studio
 
 ## CI/CD — Automatischer Build via GitHub Actions
 
-Bei jedem Push auf `main` und bei Tags (`v2026.08.18`, CalVer-Format `vYYYY.MM.DD[.N]` — wie im [Backend-Repo](https://github.com/BattloXX/Einsatzcockpit)) baut GitHub Actions automatisch eine APK und stellt sie als Artefakt bereit. Nach jedem veröffentlichten GitHub Release erhöht `.github/workflows/version-bump.yml` die Version in `package.json`/`package-lock.json` automatisch um einen Tages-Suffix (`.1`, `.2`, …), analog zum Backend-Workflow.
+Bei jedem Push auf `main` und bei Tags (`v2026.09.19`, bei mehreren Releases am selben Tag mit Tages-Suffix `v2026.09.19.1`, `.2`, … — CalVer-Format `vYYYY.MM.DD[.N]`, wie im [Backend-Repo](https://github.com/BattloXX/Einsatzcockpit)) baut GitHub Actions automatisch eine APK und stellt sie als Artefakt bereit. Nach jedem veröffentlichten GitHub Release erhöht `.github/workflows/version-bump.yml` die Version in `package.json`/`package-lock.json` automatisch um einen Tages-Suffix (`.1`, `.2`, …), analog zum Backend-Workflow.
 
 ### Was der Workflow macht
 
@@ -174,7 +185,9 @@ keytool -genkey -v \
 git push origin main
 
 # Release mit GitHub Release-Seite (erfordert Keystore-Secrets, CalVer-Tag)
-git tag v2026.08.18 && git push origin v2026.08.18
+git tag v2026.09.19 && git push origin v2026.09.19
+# Zweites Release am selben Tag: Tages-Suffix anhängen
+git tag v2026.09.19.1 && git push origin v2026.09.19.1
 ```
 
 Die fertige APK ist unter **Actions → letzter Run → Artifacts → einsatzcockpit-v\<Version\>** abrufbar (bei getaggten Releases zusätzlich direkt unter [Releases](../../releases)).
@@ -273,3 +286,33 @@ die sichtbare App-WebView zwischenzeitlich beendet wurde:
   PWA-Sync auf. Er startet keinen Foreground-Service und hält keinen WakeLock.
 
 Manuell auslösbar in der WebView-Konsole: `window.objektOfflineSync()`.
+
+---
+
+## Offline-Start & Einsatzdaten
+
+Objekt- und Kontaktdaten sind offline verfügbar (siehe oben) — ein kompletter
+Offline-Start der App und aktuell gehaltene Einsatzseiten brauchten zusätzliche
+Absicherung, da beide ursprünglich stillschweigend an einer netzwerkabhängigen
+Route hängen geblieben sind:
+
+- **Offline-Start:** `www/index.html` navigiert bei jedem Start mit gespeichertem
+  Geräte-/Account-Token normalerweise über eine netzwerkabhängige Login-Route
+  (`/geraet-login` bzw. `/?native=1&fcm_token=...`) — beide scheitern offline,
+  weil `/geraet-login` einen DB-Roundtrip fürs Session-Cookie braucht und vom
+  Service Worker nie gecacht wird, und der wechselnde `fcm_token`-Query-Parameter
+  den Cache-Treffer auf die precachte Startseite verhindert. `navigator.onLine`
+  erkennt den Offline-Fall jetzt vorher und springt stattdessen direkt zur
+  precachten Startseite `https://einsatzcockpit.com/` (ohne Query-String, exakter
+  Cache-Treffer) — das bei Geräte-Token-Logins ~10 Jahre gültige Session-Cookie
+  aus dem letzten Online-Login liegt bereits im WebView-Cookiespeicher, ein
+  Login-Roundtrip ist offline nicht nötig.
+- **Einsatz-Preload:** `/einsatz/<id>[/info]` wird vom Service Worker (`sw.js`,
+  Backend) network-first gecacht, aber nur für tatsächlich geöffnete Einsätze.
+  Wird ein Einsatz per Push alarmiert, ohne dass die App ihn sofort öffnet,
+  bleibt die Seite ungecacht. `EinsatzPreloadWorker` lädt die betroffene Seite
+  (die Push-Payload trägt die URL bereits mit, `data["url"]`) bei Bedarf still
+  in einer kurzlebigen WebView vor und triggert damit die bestehende
+  Service-Worker-Cache-Regel — bewusst mit niedriger, nicht-dringlicher
+  WorkManager-Priorität, damit SMS-Gateway-Betrieb und der Live-Status-Refresh
+  beim selben Push-Empfang unbeeinflusst bleiben.
