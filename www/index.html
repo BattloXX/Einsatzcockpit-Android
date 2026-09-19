@@ -120,6 +120,13 @@ function withFcmParam(url, fcmToken) {
   return url + (url.includes('?') ? '&' : '?') + 'fcm_token=' + encodeURIComponent(fcmToken);
 }
 
+// navigator.onLine erkennt zuverlässig den Fall "kein Netzwerkinterface aktiv"
+// (der hier relevante Fall: Funkloch/Flugmodus). Liefert die WebView-API mal
+// undefined, wird das als "online" behandelt (bisheriges Verhalten, kein Risiko).
+function isOffline() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
 // ── Start-Logik ────────────────────────────────────────────────────────────────
 // Wartet auf Capacitor-Bridge (asynchron injiziert)
 function waitForCapacitor(cb, timeout = 3000) {
@@ -216,11 +223,22 @@ waitForCapacitor(async () => {
   }
 
   if (hasDevice) {
-    setStatus('Anmelden…');
     // ForegroundService starten – App-Prozess bleibt im Hintergrund am Leben,
     // auch wenn der Bildschirm ausgeht (Bildschirm darf ausgehen, App nicht)
     const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
     if (DevKA) { try { await DevKA.startKeepalive(); } catch (_) {} }
+    if (isOffline()) {
+      // Offline: /geraet-login braucht zwingend einen DB-Roundtrip (Session-Cookie
+      // ausstellen) und wird vom Service Worker nie gecacht – wäre hier ein
+      // Sackgassen-Navigationsfehler. Das Session-Cookie aus dem letzten Online-Login
+      // ist ~10 Jahre gültig und liegt schon im WebView-Cookiespeicher; ein Sprung
+      // zur precachten Startseite (ohne Query-String, exakter Cache-Treffer in sw.js
+      // CORE_PRECACHE) reicht, um die bereits offline verfügbaren Inhalte zu zeigen.
+      setStatus('Offline – zeige zuletzt geladene Ansicht…');
+      window.location.replace('https://einsatzcockpit.com/');
+      return;
+    }
+    setStatus('Anmelden…');
     const deviceFcmToken = await registerPushToken();
     window.location.replace(withFcmParam(
       'https://einsatzcockpit.com/geraet-login?token=' + encodeURIComponent(deviceToken) + '&native=1',
@@ -253,6 +271,11 @@ waitForCapacitor(async () => {
     if (liveEnabled === '1') {
       const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
       if (DevKA) { try { await DevKA.startKeepalive(); } catch (_) {} }
+    }
+    if (isOffline()) {
+      setStatus('Offline – zeige zuletzt geladene Ansicht…');
+      window.location.replace('https://einsatzcockpit.com/');
+      return;
     }
     setStatus('Anmelden…');
     // Push-Registrierung faengt HIER (still, ohne Setup-Screen) jeden weiteren
