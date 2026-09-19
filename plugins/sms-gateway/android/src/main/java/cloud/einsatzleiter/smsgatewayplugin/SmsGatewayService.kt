@@ -63,6 +63,7 @@ class SmsGatewayService : Service() {
         private const val CONNECT_STUCK_TIMEOUT_MS = 25_000L
         // Konservativer Default; das Server-Ping-Intervall ist hier nicht bekannt.
         private const val HEARTBEAT_STALE_MS       = 120_000L
+        private const val APP_PING_INTERVAL_MS     = 45_000L   // < HEARTBEAT_STALE_MS (120s), damit mind. ein Ping-Zyklus Puffer bleibt
 
         // SMS-Empfang: Server-gemeldeter Soll-Zustand (persistiert für Neustart nach Boot)
         // und lokal gepufferte, noch nicht bestätigte Empfangs-SMS.
@@ -163,6 +164,7 @@ class SmsGatewayService : Service() {
     private var reconnectDelay = 1000L   // ms, verdoppelt bis max 30 000 ms
     private val reconnectHandler = Handler(Looper.getMainLooper())
     private val watchdogHandler  = Handler(Looper.getMainLooper())
+    private val appPingHandler   = Handler(Looper.getMainLooper())
 
     // Hält die CPU wach, damit Timer und WebSocket-Pings auch im Hintergrund feuern
     private var wakeLock: PowerManager.WakeLock? = null
@@ -240,6 +242,7 @@ class SmsGatewayService : Service() {
             ACTION_STOP -> {
                 running = false
                 stopWatchdog()
+                stopAppPing()
                 ws?.close(1000, "Gestoppt")
                 ws = null
                 isConnected = false
@@ -282,6 +285,7 @@ class SmsGatewayService : Service() {
     override fun onDestroy() {
         running = false
         stopWatchdog()
+        stopAppPing()
         reconnectHandler.removeCallbacksAndMessages(null)
         ws?.close(1000, "Service zerstört")
         ws = null
@@ -381,6 +385,23 @@ class SmsGatewayService : Service() {
         watchdogHandler.removeCallbacksAndMessages(null)
     }
 
+    private val appPingRunnable = object : Runnable {
+        override fun run() {
+            if (!running || !isConnected) return
+            ws?.send("""{"type":"ping"}""")
+            appPingHandler.postDelayed(this, APP_PING_INTERVAL_MS)
+        }
+    }
+
+    private fun startAppPing() {
+        appPingHandler.removeCallbacksAndMessages(null)
+        appPingHandler.postDelayed(appPingRunnable, APP_PING_INTERVAL_MS)
+    }
+
+    private fun stopAppPing() {
+        appPingHandler.removeCallbacksAndMessages(null)
+    }
+
     // ── NetworkCallback ───────────────────────────────────────────────────────
 
     private fun registerNetworkCallback() {
@@ -431,6 +452,7 @@ class SmsGatewayService : Service() {
                 connectingSince = 0L
                 isConnected = true
                 lastMessageAt = System.currentTimeMillis()
+                startAppPing()
                 lastError = null
                 reconnectDelay = 1000L
                 log("✓ Verbunden – hello gesendet")
@@ -449,6 +471,7 @@ class SmsGatewayService : Service() {
                 connecting = false
                 connectingSince = 0L
                 isConnected = false
+                stopAppPing()
                 lastError = t.message ?: "Verbindungsfehler"
                 log("✗ Verbindungsfehler: ${lastError?.take(120)}")
                 updateNotification("Getrennt – ${lastError?.take(40)}")
@@ -462,6 +485,7 @@ class SmsGatewayService : Service() {
                 connecting = false
                 connectingSince = 0L
                 isConnected = false
+                stopAppPing()
                 log("WebSocket geschlossen (Code $code: $reason)")
                 emitStatus()
                 if (running) scheduleReconnect()
@@ -697,6 +721,7 @@ class SmsGatewayService : Service() {
         connecting = false
         isConnected = false
         connectingSince = 0L
+        stopAppPing()
         reconnectDelay = 1000L
         reconnectHandler.removeCallbacksAndMessages(null)
         emitStatus()
