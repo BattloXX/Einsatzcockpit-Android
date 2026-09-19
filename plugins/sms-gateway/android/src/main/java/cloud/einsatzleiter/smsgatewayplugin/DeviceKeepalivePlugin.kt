@@ -1,6 +1,8 @@
 package cloud.einsatzleiter.smsgatewayplugin
 
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -29,6 +31,26 @@ import kotlinx.coroutines.launch
  */
 @CapacitorPlugin(name = "DeviceKeepalive")
 class DeviceKeepalivePlugin : Plugin() {
+
+    /**
+     * Returns Android's actual, validated network state.
+     *
+     * WebView's navigator.onLine is not reliable after entering flight mode or
+     * losing a mobile connection: it can still be true although no request can
+     * leave the device. The local startup page uses this before it attempts a
+     * device-login roundtrip, so it can select the cached PWA instead.
+     */
+    @PluginMethod
+    fun getNetworkStatus(call: PluginCall) {
+        val manager = context.getSystemService(ConnectivityManager::class.java)
+        val network = manager?.activeNetwork
+        val capabilities = network?.let { manager.getNetworkCapabilities(it) }
+        val connected = capabilities?.let {
+            it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                && it.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } == true
+        call.resolve(JSObject().apply { put("connected", connected) })
+    }
 
     @PluginMethod
     fun registerFcmToken(call: PluginCall) {

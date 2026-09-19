@@ -120,10 +120,21 @@ function withFcmParam(url, fcmToken) {
   return url + (url.includes('?') ? '&' : '?') + 'fcm_token=' + encodeURIComponent(fcmToken);
 }
 
-// navigator.onLine erkennt zuverlässig den Fall "kein Netzwerkinterface aktiv"
-// (der hier relevante Fall: Funkloch/Flugmodus). Liefert die WebView-API mal
-// undefined, wird das als "online" behandelt (bisheriges Verhalten, kein Risiko).
-function isOffline() {
+// navigator.onLine bleibt in Android-WebViews nach Flugmodus oder Netzverlust
+// gelegentlich auf true. Vor der Anmeldung fragen wir daher bevorzugt Androids
+// ConnectivityManager nach einem tatsächlich validierten Internetzugang. Falls
+// die native Brücke ausnahmsweise noch nicht bereitsteht, bleibt navigator.onLine
+// als Browser-Fallback erhalten.
+async function isOffline() {
+  try {
+    const nativeNetwork = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (nativeNetwork && typeof nativeNetwork.getNetworkStatus === 'function') {
+      const { connected } = await nativeNetwork.getNetworkStatus();
+      return connected !== true;
+    }
+  } catch (_) {
+    // Fallback für eine unvollständig injizierte Capacitor-Brücke.
+  }
   return typeof navigator !== 'undefined' && navigator.onLine === false;
 }
 
@@ -227,7 +238,7 @@ waitForCapacitor(async () => {
     // auch wenn der Bildschirm ausgeht (Bildschirm darf ausgehen, App nicht)
     const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
     if (DevKA) { try { await DevKA.startKeepalive(); } catch (_) {} }
-    if (isOffline()) {
+    if (await isOffline()) {
       // Offline: /geraet-login braucht zwingend einen DB-Roundtrip (Session-Cookie
       // ausstellen) und wird vom Service Worker nie gecacht – wäre hier ein
       // Sackgassen-Navigationsfehler. Das Session-Cookie aus dem letzten Online-Login
@@ -272,7 +283,7 @@ waitForCapacitor(async () => {
       const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
       if (DevKA) { try { await DevKA.startKeepalive(); } catch (_) {} }
     }
-    if (isOffline()) {
+    if (await isOffline()) {
       setStatus('Offline – zeige zuletzt geladene Ansicht…');
       window.location.replace('https://einsatzcockpit.com/');
       return;
