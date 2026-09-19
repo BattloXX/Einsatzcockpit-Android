@@ -23,6 +23,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         private const val GENERIC_CHANNEL_ID = "ec_push"
         private const val GENERIC_NOTIFICATION_ID = 7305
         const val ALARM_FALLBACK_NOTIFICATION_ID = 7306
+        private val EINSATZ_PRELOAD_URL_REGEX = Regex("^/einsatz/\\d+(/info)?$")
     }
 
     override fun onNewToken(token: String) {
@@ -35,6 +36,12 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
+        data["url"]?.let { rawUrl ->
+            val path = try { android.net.Uri.parse(rawUrl).path } catch (_: Exception) { null }
+            if (path != null && EINSATZ_PRELOAD_URL_REGEX.matches(path)) {
+                EinsatzPreloadWorker.enqueue(this, absoluteUrl(rawUrl))
+            }
+        }
         val isAlarm = data["channel_id"] == "einsatz_alarm"
         val isSilentWake = data["silent"] == "1"
         data["delivery_id"]?.takeIf { it.isNotBlank() }?.let { sendPushAck(it) }
