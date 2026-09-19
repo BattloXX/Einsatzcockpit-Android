@@ -60,6 +60,9 @@ class SmsGatewayService : Service() {
         private const val NOTIF_CHANNEL_ID = "ec_sms_gateway"
         private const val NOTIF_ID         = 7301
         private const val WAKE_LOCK_TAG    = "einsatzcockpit:smsgw"
+        private const val CONNECT_STUCK_TIMEOUT_MS = 25_000L
+        // Konservativer Default; das Server-Ping-Intervall ist hier nicht bekannt.
+        private const val HEARTBEAT_STALE_MS       = 120_000L
 
         // SMS-Empfang: Server-gemeldeter Soll-Zustand (persistiert für Neustart nach Boot)
         // und lokal gepufferte, noch nicht bestätigte Empfangs-SMS.
@@ -154,6 +157,8 @@ class SmsGatewayService : Service() {
     // Verhindert dass mehrere Quellen (Watchdog, Reconnect, NetworkCallback) gleichzeitig
     // einen WebSocket aufbauen und dadurch doppelte/tote Verbindungen entstehen.
     @Volatile private var connecting = false
+    @Volatile private var connectingSince: Long = 0L
+    @Volatile private var lastMessageAt: Long = 0L
 
     private var reconnectDelay = 1000L   // ms, verdoppelt bis max 30 000 ms
     private val reconnectHandler = Handler(Looper.getMainLooper())
@@ -238,6 +243,8 @@ class SmsGatewayService : Service() {
                 ws?.close(1000, "Gestoppt")
                 ws = null
                 isConnected = false
+                connectingSince = 0L
+                lastMessageAt = 0L
                 emit("statusChanged") {
                     put("connected", false)
                     put("lastError", "")
@@ -278,6 +285,8 @@ class SmsGatewayService : Service() {
         reconnectHandler.removeCallbacksAndMessages(null)
         ws?.close(1000, "Service zerstört")
         ws = null
+        connectingSince = 0L
+        lastMessageAt = 0L
         unregisterNetworkCallback()
         releaseWakeLock()
         httpClient.dispatcher.cancelAll()
@@ -344,11 +353,20 @@ class SmsGatewayService : Service() {
             // WakeLock bei JEDEM Durchlauf erneuern – sonst läuft der 24-h-Lock im
             // dauerhaft verbundenen Zustand aus und das Gerät kann schlafen/dozen.
             acquireWakeLock()
-            if (!isConnected) {
-                log("Watchdog: nicht verbunden – erzwinge Reconnect")
-                reconnectDelay = 1000L
-                reconnectHandler.removeCallbacksAndMessages(null)
-                connect()
+            val now = System.currentTimeMillis()
+            when {
+                !isConnected && !connecting -> {
+                    log("Watchdog: nicht verbunden – erzwinge Reconnect")
+                    reconnectDelay = 1000L
+                    reconnectHandler.removeCallbacksAndMessages(null)
+                    connect()
+                }
+                connecting && connectingSince != 0L && now - connectingSince > CONNECT_STUCK_TIMEOUT_MS -> {
+                    forceReconnect("Verbindungsaufbau hängt seit ${(now - connectingSince) / 1000}s")
+                }
+                isConnected && lastMessageAt != 0L && now - lastMessageAt > HEARTBEAT_STALE_MS -> {
+                    forceReconnect("kein Lebenszeichen seit ${(now - lastMessageAt) / 1000}s – Verbindung wirkt tot")
+                }
             }
             watchdogHandler.postDelayed(this, 30_000L)
         }
@@ -391,6 +409,7 @@ class SmsGatewayService : Service() {
         // entstünden mehrere WebSockets (und serverseitig tote Doppel-Registrierungen).
         if (connecting || isConnected) return
         connecting = true
+        connectingSince = System.currentTimeMillis()
         reconnectHandler.removeCallbacksAndMessages(null)
 
         // Eventuell noch offenen alten Socket hart schließen, bevor ein neuer entsteht.
@@ -409,7 +428,9 @@ class SmsGatewayService : Service() {
         ws = httpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 connecting = false
+                connectingSince = 0L
                 isConnected = true
+                lastMessageAt = System.currentTimeMillis()
                 lastError = null
                 reconnectDelay = 1000L
                 log("✓ Verbunden – hello gesendet")
@@ -426,6 +447,7 @@ class SmsGatewayService : Service() {
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 connecting = false
+                connectingSince = 0L
                 isConnected = false
                 lastError = t.message ?: "Verbindungsfehler"
                 log("✗ Verbindungsfehler: ${lastError?.take(120)}")
@@ -438,6 +460,7 @@ class SmsGatewayService : Service() {
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 connecting = false
+                connectingSince = 0L
                 isConnected = false
                 log("WebSocket geschlossen (Code $code: $reason)")
                 emitStatus()
@@ -447,6 +470,7 @@ class SmsGatewayService : Service() {
     }
 
     private fun handleMessage(ws: WebSocket, text: String) {
+        lastMessageAt = System.currentTimeMillis()
         val msg = try { JSONObject(text) } catch (_: Exception) { return }
 
         when (msg.optString("type")) {
@@ -665,6 +689,19 @@ class SmsGatewayService : Service() {
     }
 
     // ── Hilfs-Methoden ────────────────────────────────────────────────────────
+
+    private fun forceReconnect(reason: String) {
+        log("Erzwinge Reconnect: $reason")
+        ws?.cancel()
+        ws = null
+        connecting = false
+        isConnected = false
+        connectingSince = 0L
+        reconnectDelay = 1000L
+        reconnectHandler.removeCallbacksAndMessages(null)
+        emitStatus()
+        connect()
+    }
 
     private fun scheduleReconnect() {
         if (!running) return
