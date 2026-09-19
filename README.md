@@ -289,6 +289,40 @@ Manuell auslösbar in der WebView-Konsole: `window.objektOfflineSync()`.
 
 ---
 
+## Offline-Kontaktdaten (seit 2026-09-15)
+
+Die App synchronisiert Kontakte (Telefonnummern, E-Mail, Objektzuordnungen) in eine
+native Room-Datenbank, unabhängig von der WebView — nutzbar auch ohne geladene PWA,
+z. B. auf einem reinen SMS-Gateway-Gerät oder im Funkloch:
+
+- **Sync-Engine** (`kontakte/KontaktSyncEngine.kt`): lädt Kontakte seitenweise, prüft
+  die Konsistenz über alle Seiten und aktiviert den Snapshot erst nach vollständigem
+  Download atomar — ein Abbruch mitten im Download hinterlässt nie einen halbfertigen
+  Bestand. Delta-Syncs wenden Änderungen und Sync-Cursor pro Seite gemeinsam in einer
+  Transaktion an. Ein Org- oder Schema-Wechsel löscht den lokalen Bestand und erzwingt
+  einen frischen Snapshot. Authentifiziert sowohl über Geräte-Bearer-Token als auch
+  über WebView-Session-Cookies (reine Account-Logins ohne Geräte-Pairing).
+- **Auslöser** (`kontakte/KontaktOfflineSyncWorker.kt`, `KontaktSyncForegroundProvider.kt`):
+  periodisch alle 6 Stunden plus sofortiger Einmal-Sync bei Login und bei jedem
+  App-Vordergrundwechsel (nativ über `ProcessLifecycleOwner`, registriert per
+  manifest-gemergtem `ContentProvider` — ein WebView-JS-Listener würde nie feuern,
+  weil die WebView nach jedem Login sofort zur Remote-PWA weiterleitet). Kein
+  Foreground-Service, kein WakeLock.
+- **Offline-UI** (`KontaktListActivity`, `KontaktDetailActivity`): eigener, von der
+  WebView unabhängiger Einstiegspunkt über einen dynamischen App-Shortcut "Kontakte
+  offline" (langes Drücken auf das App-Icon). Statuskopf ("Offline verfügbar – N
+  Kontakte – Stand HH:MM"), Live-Suche über Name/Nummer (reaktiv über Room-`Flow`),
+  Anruf (`ACTION_DIAL`) und SMS (`smsto:`) direkt aus der Detailansicht. Objekt-
+  zuordnungen werden nur mit Objekt-ID/Rolle angezeigt (kein Objektname im
+  Sync-Vertrag — bekannte, akzeptierte Einschränkung).
+- **Logout** räumt die lokale Kontakt-DB (`DeviceKeepalive.wipeKontakte()`) und
+  bestellt den Worker ab.
+
+Manuell erreichbar: App-Shortcut "Kontakte offline", oder per Bridge-Aufruf
+`DeviceKeepalive.openOfflineKontakte()`.
+
+---
+
 ## Offline-Start & Einsatzdaten
 
 Objekt- und Kontaktdaten sind offline verfügbar (siehe oben) — ein kompletter
