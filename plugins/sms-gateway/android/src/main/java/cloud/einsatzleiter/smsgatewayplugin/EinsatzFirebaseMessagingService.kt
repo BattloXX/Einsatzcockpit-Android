@@ -55,7 +55,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 data["body"].orEmpty(),
                 data["url"].orEmpty(),
                 ALARM_FALLBACK_NOTIFICATION_ID,
-                AlarmNotificationChannel.CHANNEL_ID,
+                channelId = if (alarmChannelWanted()) AlarmNotificationChannel.CHANNEL_ID else GENERIC_CHANNEL_ID,
             )
         } else {
             SmsGatewayService.log("FCM empfangen: generic")
@@ -86,6 +86,16 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
             )
         }
     }
+
+    /**
+     * Liest den vom Nutzer in "Ueber die App" gesetzten Alarmkanal-Wunsch
+     * (Preferences-Key el_alarm_override_silent, "1" = aktiviert, Default aus).
+     * Ohne diese Pruefung wuerde jeder Alarm-Push den bewusst deaktivierten
+     * Alarmkanal automatisch wieder anlegen.
+     */
+    private fun alarmChannelWanted(): Boolean =
+        getSharedPreferences("CapacitorStorage", MODE_PRIVATE)
+            .getString("el_alarm_override_silent", null) == "1"
 
     private fun postGenericNotification(
         title: String,
