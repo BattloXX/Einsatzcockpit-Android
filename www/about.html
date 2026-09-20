@@ -168,6 +168,7 @@
       <div class="cache-activity__current" id="cacheCurrentActivity">Warte auf den nächsten Abgleich …</div>
       <ul class="cache-log" id="cacheLog"><li><span></span><span>Noch keine Cache-Aktivität aufgezeichnet</span></li></ul>
     </div>
+    <div style="margin-top:12px;"><button class="btn-ghost" style="width:100%;" id="btnRefreshOfflineCache" onclick="refreshOfflineCache()">↻ Offline-Daten jetzt aktualisieren</button></div>
   </div>
 
   <!-- Push-Benachrichtigungen: hier statt auf /admin/push-nachrichten, weil die
@@ -305,6 +306,25 @@ async function updateOfflineCacheStatus() {
   } catch (_) {
     badge.textContent = 'Nicht verfügbar';
     badge.className = 'badge-soft off';
+  }
+}
+
+async function refreshOfflineCache() {
+  const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
+  const button = document.getElementById('btnRefreshOfflineCache');
+  if (!plugin?.refreshOfflineCache || button.disabled) return;
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = '⏳ Abgleich wird gestartet …';
+  try {
+    await plugin.refreshOfflineCache();
+    await updateOfflineCacheStatus();
+    toast('Offline-Abgleich wurde gestartet.');
+  } catch (_) {
+    toast('Offline-Abgleich konnte nicht gestartet werden.');
+  } finally {
+    button.disabled = false;
+    button.textContent = previous;
   }
 }
 

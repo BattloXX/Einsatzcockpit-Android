@@ -101,6 +101,7 @@ class DeviceKeepalivePlugin : Plugin() {
     @PluginMethod
     fun startKeepalive(call: PluginCall) {
         ObjektOfflineSyncWorker.schedule(context)
+        ObjektOfflineSyncWorker.triggerImmediateSync(context)
         KontaktOfflineSyncWorker.schedule(context)
         KontaktOfflineSyncWorker.triggerImmediateSync(context)
         val intent = Intent(context, DeviceKeepaliveService::class.java).apply {
@@ -167,6 +168,17 @@ class DeviceKeepalivePlugin : Plugin() {
                 call.reject(error.message ?: "Offline-Cache-Status konnte nicht gelesen werden")
             }
         }
+    }
+
+    /** Lets the about screen start both offline synchronizers and record that request. */
+    @PluginMethod
+    fun refreshOfflineCache(call: PluginCall) {
+        OfflineCacheStatusStore.logActivity(context, "Manueller Offline-Abgleich wurde gestartet")
+        ObjektOfflineSyncWorker.schedule(context)
+        ObjektOfflineSyncWorker.triggerImmediateSync(context)
+        KontaktOfflineSyncWorker.schedule(context)
+        KontaktOfflineSyncWorker.triggerImmediateSync(context)
+        call.resolve()
     }
 
     /** Opens the native, locally stored contacts independently of the WebView. */

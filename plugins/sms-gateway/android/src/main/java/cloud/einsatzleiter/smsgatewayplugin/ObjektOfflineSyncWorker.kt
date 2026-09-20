@@ -9,7 +9,9 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
@@ -36,7 +38,10 @@ class ObjektOfflineSyncWorker(
 
         fun schedule(context: Context) {
             val prefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
-            if (prefs.getString("el_device_token", null).isNullOrBlank()) return
+            if (prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null).isNullOrBlank()) {
+                OfflineCacheStatusStore.logActivity(context, "Objekt-Sync wartet auf die Anmeldung")
+                return
+            }
 
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -53,16 +58,34 @@ class ObjektOfflineSyncWorker(
                 request,
             )
         }
+
+        /** Starts one Android WebView sync after login instead of waiting for the 6 h interval. */
+        fun triggerImmediateSync(context: Context) {
+            val request = OneTimeWorkRequestBuilder<ObjektOfflineSyncWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
+            WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+                "$WORK_NAME-immediate",
+                ExistingWorkPolicy.KEEP,
+                request,
+            )
+        }
     }
 
     override fun doWork(): Result {
         val prefs = applicationContext.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
-        if (prefs.getString("el_device_token", null).isNullOrBlank()) {
+        if (prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null).isNullOrBlank()) {
+            OfflineCacheStatusStore.logActivity(applicationContext, "Objekt-Sync übersprungen: App ist nicht angemeldet")
             WorkManager.getInstance(applicationContext).cancelUniqueWork(WORK_NAME)
             return Result.success()
         }
         val baseUrl = prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null)?.trimEnd('/')
-            ?: return Result.retry()
+            ?: run {
+                OfflineCacheStatusStore.logActivity(applicationContext, "Objekt-Sync fehlgeschlagen: Server-URL fehlt")
+                return Result.retry()
+            }
+
+        OfflineCacheStatusStore.logActivity(applicationContext, "Objekt-Sync wird im Hintergrund gestartet")
 
         val completed = CountDownLatch(1)
         val succeeded = AtomicBoolean(false)
@@ -80,6 +103,11 @@ class ObjektOfflineSyncWorker(
                     it.destroy()
                 }
             }
+        }
+        if (!finished) {
+            OfflineCacheStatusStore.logActivity(applicationContext, "Objekt-Sync fehlgeschlagen: Zeitlimit überschritten")
+        } else if (!succeeded.get()) {
+            OfflineCacheStatusStore.logActivity(applicationContext, "Objekt-Sync fehlgeschlagen: WebView-Abgleich nicht erfolgreich")
         }
         return if (finished && succeeded.get()) Result.success() else Result.retry()
     }

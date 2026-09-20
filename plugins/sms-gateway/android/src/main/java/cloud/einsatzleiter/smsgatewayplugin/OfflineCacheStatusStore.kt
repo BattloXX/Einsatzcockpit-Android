@@ -10,6 +10,7 @@ object OfflineCacheStatusStore {
     private const val KEY_OBJECT_TOTAL = "object_total"
     private const val KEY_OBJECT_UPDATED = "object_updated"
     private const val KEY_OBJECT_ACTIVITY = "object_activity"
+    private const val KEY_CURRENT_ACTIVITY = "current_activity"
     private const val KEY_ACTIVITIES = "activities"
     private const val MAX_ACTIVITIES = 8
 
@@ -20,6 +21,7 @@ object OfflineCacheStatusStore {
             .putInt(KEY_OBJECT_TOTAL, total.coerceAtLeast(0))
             .putLong(KEY_OBJECT_UPDATED, System.currentTimeMillis())
             .putString(KEY_OBJECT_ACTIVITY, activity)
+            .putString(KEY_CURRENT_ACTIVITY, activity)
             .putString(KEY_ACTIVITIES, appendActivity(prefs.getString(KEY_ACTIVITIES, null), activity))
             .apply()
     }
@@ -27,6 +29,7 @@ object OfflineCacheStatusStore {
     fun logActivity(context: Context, activity: String) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs.edit()
+            .putString(KEY_CURRENT_ACTIVITY, activity)
             .putString(KEY_ACTIVITIES, appendActivity(prefs.getString(KEY_ACTIVITIES, null), activity))
             .apply()
     }
@@ -37,7 +40,8 @@ object OfflineCacheStatusStore {
             cached = prefs.getInt(KEY_OBJECT_CACHED, 0),
             total = prefs.getInt(KEY_OBJECT_TOTAL, 0),
             updatedAtMs = prefs.getLong(KEY_OBJECT_UPDATED, 0).takeIf { it > 0 },
-            activity = prefs.getString(KEY_OBJECT_ACTIVITY, null),
+            activity = prefs.getString(KEY_CURRENT_ACTIVITY, null)
+                ?: prefs.getString(KEY_OBJECT_ACTIVITY, null),
             activities = readActivities(prefs.getString(KEY_ACTIVITIES, null)),
         )
     }

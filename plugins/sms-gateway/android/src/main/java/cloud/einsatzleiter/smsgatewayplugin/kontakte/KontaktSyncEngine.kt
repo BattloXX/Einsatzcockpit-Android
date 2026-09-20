@@ -50,7 +50,9 @@ class KontaktSyncEngine(
             )
             true
         } catch (error: Exception) {
-            fail(db, error.message ?: error.javaClass.simpleName)
+            val message = error.message ?: error.javaClass.simpleName
+            OfflineCacheStatusStore.logActivity(appContext, "Kontakt-Sync fehlgeschlagen: $message")
+            fail(db, message)
         }
     }
 
@@ -239,7 +241,9 @@ class KontaktSyncEngine(
                 id = json.getLong("id"), kontaktId = kontaktId, nummer = nummer,
                 nummerNormalisiert = normalizeTelefonnummer(nummer), label = json.nullableString("label"),
                 sort = json.getInt("sort"), bevorzugt = json.getBoolean("bevorzugt"),
-                smsEignung = json.getBoolean("sms_eignung"),
+                // Alte/teilweise Datensätze enthalten hier JSON null. Ein
+                // fehlender SMS-Hinweis bedeutet sicherheitshalber "nein".
+                smsEignung = json.optBoolean("sms_eignung", false),
             ))
         }
     }
