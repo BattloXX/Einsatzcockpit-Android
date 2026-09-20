@@ -11,6 +11,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import cloud.einsatzleiter.smsgatewayplugin.EinsatzLivePoller
+import cloud.einsatzleiter.smsgatewayplugin.OfflineCacheStatusStore
 import java.util.concurrent.TimeUnit
 
 /** Periodically persists the native contact feed without creating a WebView. */
@@ -22,8 +23,10 @@ class KontaktOfflineSyncWorker(
     override suspend fun doWork(): Result {
         val prefs = applicationContext.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
         if (prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null).isNullOrBlank()) {
+            OfflineCacheStatusStore.logActivity(applicationContext, "Kontakt-Sync übersprungen: App ist nicht angemeldet")
             return Result.success()
         }
+        OfflineCacheStatusStore.logActivity(applicationContext, "Kontakt-Sync wird im Hintergrund gestartet")
         return if (KontaktSyncEngine().syncOnce(applicationContext)) Result.success() else Result.retry()
     }
 
@@ -58,6 +61,18 @@ class KontaktOfflineSyncWorker(
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
                 IMMEDIATE_WORK_NAME,
                 ExistingWorkPolicy.KEEP,
+                request,
+            )
+        }
+
+        /** User-requested refresh must replace a stale retry instead of silently keeping it. */
+        fun forceImmediateSync(context: Context) {
+            val request = OneTimeWorkRequestBuilder<KontaktOfflineSyncWorker>()
+                .setConstraints(networkConstraints())
+                .build()
+            WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+                IMMEDIATE_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
                 request,
             )
         }

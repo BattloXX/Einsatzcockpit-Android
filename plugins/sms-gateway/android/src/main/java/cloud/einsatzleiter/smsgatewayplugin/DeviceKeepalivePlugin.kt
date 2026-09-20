@@ -103,7 +103,7 @@ class DeviceKeepalivePlugin : Plugin() {
         ObjektOfflineSyncWorker.schedule(context)
         ObjektOfflineSyncWorker.triggerImmediateSync(context)
         KontaktOfflineSyncWorker.schedule(context)
-        KontaktOfflineSyncWorker.triggerImmediateSync(context)
+        KontaktOfflineSyncWorker.forceImmediateSync(context)
         val intent = Intent(context, DeviceKeepaliveService::class.java).apply {
             action = DeviceKeepaliveService.ACTION_START
         }

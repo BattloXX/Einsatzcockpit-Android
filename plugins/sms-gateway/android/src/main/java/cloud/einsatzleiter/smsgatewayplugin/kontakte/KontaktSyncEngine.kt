@@ -36,6 +36,7 @@ class KontaktSyncEngine(
 
         if (baseUrl.isNullOrBlank()) return@withContext fail(db, "Server-URL fehlt")
         try {
+            OfflineCacheStatusStore.logActivity(appContext, "Kontakt-Sync verbindet mit $baseUrl")
             val status = db.syncStatusDao().get()
             if (status?.cursor == null || status?.orgId == null || status?.schemaVersion == null ||
                 status?.baseUrl != baseUrl) {
