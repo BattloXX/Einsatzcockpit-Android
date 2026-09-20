@@ -105,6 +105,36 @@
             android:name="cloud.einsatzleiter.smsgatewayplugin.EinsatzLiveDismissReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name="cloud.einsatzleiter.smsgatewayplugin.EcpKontakteWidgetProvider"
+            android:exported="false"
+            android:label="ECP Kontakte">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/ec_widget_kontakte" />
+        </receiver>
+
+        <receiver
+            android:name="cloud.einsatzleiter.smsgatewayplugin.EcpObjekteWidgetProvider"
+            android:exported="false"
+            android:label="ECP Objekte">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/ec_widget_objekte" />
+        </receiver>
+
+        <receiver
+            android:name="cloud.einsatzleiter.smsgatewayplugin.EcpEinsatzWidgetProvider"
+            android:exported="false"
+            android:label="ECP Einsatzinfo">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/ec_widget_einsatz" />
+        </receiver>
+
     </application>
 
 </manifest>

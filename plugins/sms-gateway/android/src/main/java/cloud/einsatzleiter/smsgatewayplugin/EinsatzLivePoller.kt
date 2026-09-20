@@ -204,6 +204,7 @@ class EinsatzLivePoller(
             .putString(PREF_INCIDENT_ID, state.id.toString())
             .putString(PREF_LAST_OK_MS, now.toString())
             .apply()
+        EcpWidgetSupport.saveIncident(context, state)
         notifier.post(state, baseUrl)
         schedule(ACTIVE_INTERVAL_MS)
     }
@@ -236,6 +237,7 @@ class EinsatzLivePoller(
             .remove(PREF_LAST_OK_MS)
             .remove(PREF_DISMISSED_INCIDENT_ID)
             .apply()
+        EcpWidgetSupport.clearIncident(context)
     }
 
     private fun schedule(delayMs: Long) {
