@@ -86,6 +86,18 @@
     .badge-soft.on { background: rgba(126,231,160,.14); color: var(--green); border-color: rgba(126,231,160,.4); }
     .badge-soft.off { background: rgba(255,180,171,.14); color: var(--red); border-color: rgba(255,180,171,.4); }
 
+    /* ── Offline-Datenstand ─────────────────────────────────────────────── */
+    .cache-summary { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .cache-item { background:var(--s2); border:1px solid var(--line2); border-radius:10px; padding:12px; }
+    .cache-item__name { color:var(--muted); font-size:.8rem; }
+    .cache-item__count { font-family:var(--mono); font-size:1.25rem; font-weight:700; color:var(--primary); margin-top:4px; }
+    .cache-item__detail { color:var(--faint); font-size:.72rem; margin-top:4px; line-height:1.35; }
+    .cache-activity { margin-top:12px; border-top:1px solid var(--line2); padding-top:12px; }
+    .cache-activity__current { color:var(--muted); font-size:.82rem; line-height:1.45; }
+    .cache-log { list-style:none; margin-top:9px; max-height:150px; overflow:auto; }
+    .cache-log li { display:grid; grid-template-columns:54px 1fr; gap:8px; padding:7px 0; border-top:1px solid rgba(66,71,84,.55); color:var(--muted); font-size:.76rem; line-height:1.35; }
+    .cache-log time { font-family:var(--mono); color:var(--faint); font-size:.68rem; }
+
     .toggle-row { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;color:var(--text);font-size:.88rem; }
     .toggle { position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0; }
     .toggle input { opacity:0;width:0;height:0; }
@@ -132,6 +144,29 @@
     </div>
     <div id="updateBtnRow" style="margin-top:10px;display:none;">
       <button class="btn-primary" style="width:100%;" onclick="downloadApk()">⬇ Update herunterladen</button>
+    </div>
+  </div>
+
+  <div class="card" id="offlineCacheCard">
+    <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>📦 Offline-Datenstand</span>
+      <span class="badge-soft" id="cacheStatusBadge">Prüfe…</span>
+    </div>
+    <div class="cache-summary">
+      <div class="cache-item">
+        <div class="cache-item__name">Kontakte</div>
+        <div class="cache-item__count" id="contactsCacheCount">–/–</div>
+        <div class="cache-item__detail" id="contactsCacheDetail">Lokaler Datenbestand wird geprüft</div>
+      </div>
+      <div class="cache-item">
+        <div class="cache-item__name">Objekte</div>
+        <div class="cache-item__count" id="objectsCacheCount">–/–</div>
+        <div class="cache-item__detail" id="objectsCacheDetail">Lokaler Datenbestand wird geprüft</div>
+      </div>
+    </div>
+    <div class="cache-activity">
+      <div class="cache-activity__current" id="cacheCurrentActivity">Warte auf den nächsten Abgleich …</div>
+      <ul class="cache-log" id="cacheLog"><li><span></span><span>Noch keine Cache-Aktivität aufgezeichnet</span></li></ul>
     </div>
   </div>
 
@@ -228,7 +263,50 @@ waitForCapacitor(async () => {
   checkForUpdate();
   updatePushStatusBadge();
   updateAlarmStatus();
+  updateOfflineCacheStatus();
+  setInterval(updateOfflineCacheStatus, 5000);
 });
+
+function formatCacheTime(value) {
+  if (!value) return 'Noch nicht synchronisiert';
+  try { return 'Stand ' + new Date(Number(value)).toLocaleString('de-AT', { dateStyle: 'short', timeStyle: 'short' }); }
+  catch (_) { return 'Zeitpunkt unbekannt'; }
+}
+
+function escapeHtml(value) {
+  const node = document.createElement('span');
+  node.textContent = value || '';
+  return node.innerHTML;
+}
+
+async function updateOfflineCacheStatus() {
+  const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
+  if (!plugin?.getOfflineCacheStatus) return;
+  const badge = document.getElementById('cacheStatusBadge');
+  try {
+    const status = await plugin.getOfflineCacheStatus();
+    const contactCached = Number(status.contactsCached || 0);
+    const contactTotal = Number(status.contactsTotal || 0);
+    const objectCached = Number(status.objectsCached || 0);
+    const objectTotal = Number(status.objectsTotal || 0);
+    document.getElementById('contactsCacheCount').textContent = contactCached + '/' + contactTotal;
+    document.getElementById('objectsCacheCount').textContent = objectCached + '/' + objectTotal;
+    document.getElementById('contactsCacheDetail').textContent = status.contactsError || formatCacheTime(status.contactsUpdatedAtMs);
+    document.getElementById('objectsCacheDetail').textContent = formatCacheTime(status.objectsUpdatedAtMs);
+    document.getElementById('cacheCurrentActivity').textContent = status.objectActivity || 'Offline-Datenstand wird im Hintergrund aktuell gehalten.';
+    const ready = contactCached === contactTotal && objectCached === objectTotal && (contactTotal + objectTotal) > 0;
+    badge.textContent = ready ? 'Offline bereit' : 'Wird aktualisiert';
+    badge.className = 'badge-soft ' + (ready ? 'on' : '');
+    const activities = Array.isArray(status.activities) ? status.activities : [];
+    const log = document.getElementById('cacheLog');
+    log.innerHTML = activities.length
+      ? activities.map(entry => '<li><time>' + new Date(Number(entry.at)).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }) + '</time><span>' + escapeHtml(entry.text) + '</span></li>').join('')
+      : '<li><span></span><span>Noch keine Cache-Aktivität aufgezeichnet</span></li>';
+  } catch (_) {
+    badge.textContent = 'Nicht verfügbar';
+    badge.className = 'badge-soft off';
+  }
+}
 
 // ── Alarmkanal ────────────────────────────────────────────────────────────────
 async function updateAlarmStatus() {

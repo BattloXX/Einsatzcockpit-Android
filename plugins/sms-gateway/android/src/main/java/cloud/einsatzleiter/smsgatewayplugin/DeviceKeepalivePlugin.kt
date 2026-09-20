@@ -11,6 +11,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import com.google.firebase.messaging.FirebaseMessaging
 import cloud.einsatzleiter.smsgatewayplugin.kontakte.KontaktOfflineSyncWorker
 import cloud.einsatzleiter.smsgatewayplugin.kontakte.KontaktSyncEngine
+import cloud.einsatzleiter.smsgatewayplugin.kontakte.KontaktDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -124,6 +125,48 @@ class DeviceKeepalivePlugin : Plugin() {
         KontaktOfflineSyncWorker.schedule(context)
         KontaktOfflineSyncWorker.triggerImmediateSync(context)
         call.resolve()
+    }
+
+    /** Persists object-cache progress reported by the remote Android WebView. */
+    @PluginMethod
+    fun reportObjectCacheStatus(call: PluginCall) {
+        val cached = call.getInt("cached", 0) ?: 0
+        val total = call.getInt("total", 0) ?: 0
+        val activity = call.getString("activity")?.takeIf { it.isNotBlank() }
+            ?: "Objektcache aktualisiert"
+        OfflineCacheStatusStore.updateObjects(context, cached, total, activity)
+        call.resolve()
+    }
+
+    /** Returns one native summary for the local about screen, independent of WebView origins. */
+    @PluginMethod
+    fun getOfflineCacheStatus(call: PluginCall) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val database = KontaktDatabase.get(context.applicationContext)
+                val contactCount = database.kontaktDao().count()
+                val contactStatus = database.syncStatusDao().get()
+                val objects = OfflineCacheStatusStore.objectSnapshot(context)
+                call.resolve(JSObject().apply {
+                    put("contactsCached", contactCount)
+                    // The native feed is committed atomically, therefore cached equals total.
+                    put("contactsTotal", contactCount)
+                    contactStatus?.lastSuccessAtMs?.let { put("contactsUpdatedAtMs", it) }
+                    contactStatus?.lastError?.let { put("contactsError", it) }
+                    put("objectsCached", objects.cached)
+                    put("objectsTotal", objects.total)
+                    objects.updatedAtMs?.let { put("objectsUpdatedAtMs", it) }
+                    objects.activity?.let { put("objectActivity", it) }
+                    put("activities", org.json.JSONArray().apply {
+                        objects.activities.forEach { entry ->
+                            put(org.json.JSONObject().put("at", entry.atMs).put("text", entry.text))
+                        }
+                    })
+                })
+            } catch (error: Exception) {
+                call.reject(error.message ?: "Offline-Cache-Status konnte nicht gelesen werden")
+            }
+        }
     }
 
     /** Opens the native, locally stored contacts independently of the WebView. */

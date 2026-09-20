@@ -3,6 +3,7 @@ package cloud.einsatzleiter.smsgatewayplugin.kontakte
 import android.content.Context
 import androidx.room.withTransaction
 import cloud.einsatzleiter.smsgatewayplugin.EinsatzLivePoller
+import cloud.einsatzleiter.smsgatewayplugin.OfflineCacheStatusStore
 import cloud.einsatzleiter.smsgatewayplugin.WebViewCookieJar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -42,6 +43,11 @@ class KontaktSyncEngine(
             } else {
                 syncDelta(db, baseUrl, token, requireNotNull(status))
             }
+            val contactCount = db.kontaktDao().count()
+            OfflineCacheStatusStore.logActivity(
+                appContext,
+                "Kontakte aktualisiert: $contactCount/$contactCount Kontakte offline verfügbar",
+            )
             true
         } catch (error: Exception) {
             fail(db, error.message ?: error.javaClass.simpleName)
