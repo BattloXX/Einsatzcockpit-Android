@@ -159,6 +159,7 @@ class DeviceKeepalivePlugin : Plugin() {
                     put("objectSyncEnabled", ObjektOfflineSyncWorker.isEnabled(context))
                     put("objectCacheClearing", ObjektOfflineSyncWorker.isCacheClearing(context))
                     objects.updatedAtMs?.let { put("objectsUpdatedAtMs", it) }
+                    objects.lastObjectActivity?.let { put("objectLastActivity", it) }
                     objects.activity?.let { put("objectActivity", it) }
                     put("activities", org.json.JSONArray().apply {
                         objects.activities.forEach { entry ->

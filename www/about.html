@@ -296,12 +296,17 @@ async function updateOfflineCacheStatus() {
     document.getElementById('contactsCacheCount').textContent = contactCached + '/' + contactTotal;
     document.getElementById('objectsCacheCount').textContent = objectCached + '/' + objectTotal;
     document.getElementById('contactsCacheDetail').textContent = status.contactsError || formatCacheTime(status.contactsUpdatedAtMs);
-    document.getElementById('objectsCacheDetail').textContent = formatCacheTime(status.objectsUpdatedAtMs);
+    const objectHasSynced = !!status.objectsUpdatedAtMs;
+    document.getElementById('objectsCacheDetail').textContent = objectHasSynced
+      ? formatCacheTime(status.objectsUpdatedAtMs)
+      : (status.objectLastActivity || (objectSyncEnabled ? 'Objektliste wird abgerufen' : 'Objekt-Sync ist deaktiviert'));
     document.getElementById('objectSyncToggle').checked = objectSyncEnabled;
     document.getElementById('objectSyncToggle').disabled = status.objectCacheClearing === true;
     document.getElementById('cacheCurrentActivity').textContent = status.objectActivity || 'Offline-Datenstand wird im Hintergrund aktuell gehalten.';
-    const ready = contactCached === contactTotal && objectCached === objectTotal && (contactTotal + objectTotal) > 0;
-    badge.textContent = ready ? 'Offline bereit' : 'Wird aktualisiert';
+    const contactsReady = contactCached === contactTotal && contactTotal > 0;
+    const objectsReady = !objectSyncEnabled || (objectHasSynced && objectCached === objectTotal);
+    const ready = contactsReady && objectsReady;
+    badge.textContent = ready ? 'Offline bereit' : (objectSyncEnabled && !objectHasSynced ? 'Objektliste fehlt' : 'Wird aktualisiert');
     badge.className = 'badge-soft ' + (ready ? 'on' : '');
     const activities = Array.isArray(status.activities) ? status.activities : [];
     const log = document.getElementById('cacheLog');

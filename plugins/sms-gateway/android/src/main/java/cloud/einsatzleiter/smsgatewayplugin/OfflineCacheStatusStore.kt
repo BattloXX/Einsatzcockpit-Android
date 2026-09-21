@@ -53,6 +53,7 @@ object OfflineCacheStatusStore {
             cached = prefs.getInt(KEY_OBJECT_CACHED, 0),
             total = prefs.getInt(KEY_OBJECT_TOTAL, 0),
             updatedAtMs = prefs.getLong(KEY_OBJECT_UPDATED, 0).takeIf { it > 0 },
+            lastObjectActivity = prefs.getString(KEY_OBJECT_ACTIVITY, null),
             activity = prefs.getString(KEY_CURRENT_ACTIVITY, null)
                 ?: prefs.getString(KEY_OBJECT_ACTIVITY, null),
             activities = readActivities(prefs.getString(KEY_ACTIVITIES, null)),
@@ -86,6 +87,7 @@ object OfflineCacheStatusStore {
         val cached: Int,
         val total: Int,
         val updatedAtMs: Long?,
+        val lastObjectActivity: String?,
         val activity: String?,
         val activities: List<ActivityEntry>,
     )
