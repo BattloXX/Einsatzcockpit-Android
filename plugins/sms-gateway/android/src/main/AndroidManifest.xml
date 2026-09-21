@@ -50,6 +50,15 @@
             android:exported="false"
             android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
 
+        <activity
+            android:name="cloud.einsatzleiter.smsgatewayplugin.EcpFahrtWidgetConfigureActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <provider
             android:name="cloud.einsatzleiter.smsgatewayplugin.KontaktSyncForegroundProvider"
             android:authorities="${applicationId}.kontakt-sync-foreground"
@@ -133,6 +142,16 @@
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/ec_widget_einsatz" />
+        </receiver>
+
+        <receiver
+            android:name="cloud.einsatzleiter.smsgatewayplugin.EcpFahrtWidgetProvider"
+            android:exported="false"
+            android:label="ECP Fahrt erfassen">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/ec_widget_fahrt" />
         </receiver>
 
     </application>
