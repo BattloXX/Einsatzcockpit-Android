@@ -124,18 +124,20 @@ class EcpFahrtWidgetConfigureActivity : AppCompatActivity() {
         })
     }
 
-    private fun parseVehicles(body: String): Pair<List<Vehicle>, Vehicle?>? = try {
-        val root = JSONObject(body)
-        val vehicles = root.optJSONArray("vehicles") ?: return null
-        val deviceVehicle = root.optJSONObject("device_vehicle")?.toVehicle()
-        val choices = buildList {
-            for (index in 0 until vehicles.length()) {
-                vehicles.optJSONObject(index)?.toVehicle()?.let(::add)
+    private fun parseVehicles(body: String): Pair<List<Vehicle>, Vehicle?>? {
+        return try {
+            val root = JSONObject(body)
+            val vehicles = root.optJSONArray("vehicles") ?: return null
+            val deviceVehicle = root.optJSONObject("device_vehicle")?.toVehicle()
+            val choices = buildList {
+                for (index in 0 until vehicles.length()) {
+                    vehicles.optJSONObject(index)?.toVehicle()?.let(::add)
+                }
             }
+            choices to deviceVehicle
+        } catch (_: Exception) {
+            null
         }
-        choices to deviceVehicle
-    } catch (_: Exception) {
-        null
     }
 
     private fun JSONObject.toVehicle(): Vehicle? {
