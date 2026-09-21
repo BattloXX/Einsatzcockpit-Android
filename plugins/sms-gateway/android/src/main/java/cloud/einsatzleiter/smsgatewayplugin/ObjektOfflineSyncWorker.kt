@@ -70,6 +70,18 @@ class ObjektOfflineSyncWorker(
                 request,
             )
         }
+
+        /** A refresh initiated by the user must not remain behind a stale retry. */
+        fun forceImmediateSync(context: Context) {
+            val request = OneTimeWorkRequestBuilder<ObjektOfflineSyncWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
+            WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+                "$WORK_NAME-immediate",
+                ExistingWorkPolicy.REPLACE,
+                request,
+            )
+        }
     }
 
     override fun doWork(): Result {
@@ -135,6 +147,14 @@ class ObjektOfflineSyncWorker(
         webView.settings.domStorageEnabled = true
         webView.addJavascriptInterface(object {
             @JavascriptInterface
+            fun status(message: String) {
+                OfflineCacheStatusStore.logActivity(
+                    applicationContext,
+                    "Objekt-Sync: ${message.take(400)}",
+                )
+            }
+
+            @JavascriptInterface
             fun done(ok: Boolean) {
                 succeeded.set(ok)
                 webView.post { finish() }
@@ -148,15 +168,32 @@ class ObjektOfflineSyncWorker(
                 invoked = true
                 view.evaluateJavascript(
                     """
-                    (function () {
+                    (function waitForOfflineScript(attemptsLeft) {
                       if (typeof window.objektOfflineSync !== "function") {
-                        ObjektSyncNative.done(false);
+                        if (attemptsLeft <= 0) {
+                          ObjektSyncNative.status("Offline-Skript wurde nicht geladen – Anmeldung oder WebView-Verbindung prüfen");
+                          ObjektSyncNative.done(false);
+                          return;
+                        }
+                        if (attemptsLeft === 30) {
+                          ObjektSyncNative.status("WebView geladen, warte auf Offline-Skript");
+                        }
+                        window.setTimeout(function () { waitForOfflineScript(attemptsLeft - 1); }, 500);
                         return;
                       }
+                      ObjektSyncNative.status("Offline-Skript geladen, Abgleich läuft");
                       Promise.resolve(window.objektOfflineSync())
-                        .then(function (ok) { ObjektSyncNative.done(ok === true); })
-                        .catch(function () { ObjektSyncNative.done(false); });
-                    })();
+                        .then(function (ok) {
+                          if (ok !== true) {
+                            ObjektSyncNative.status("Offline-Skript hat keinen erfolgreichen Abschluss gemeldet");
+                          }
+                          ObjektSyncNative.done(ok === true);
+                        })
+                        .catch(function (error) {
+                          ObjektSyncNative.status("Offline-Skriptfehler: " + (error && error.message ? error.message : "unbekannt"));
+                          ObjektSyncNative.done(false);
+                        });
+                    })(30);
                     """.trimIndent(),
                     null,
                 )

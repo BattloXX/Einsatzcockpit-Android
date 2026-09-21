@@ -175,9 +175,9 @@ class DeviceKeepalivePlugin : Plugin() {
     fun refreshOfflineCache(call: PluginCall) {
         OfflineCacheStatusStore.logActivity(context, "Manueller Offline-Abgleich wurde gestartet")
         ObjektOfflineSyncWorker.schedule(context)
-        ObjektOfflineSyncWorker.triggerImmediateSync(context)
+        ObjektOfflineSyncWorker.forceImmediateSync(context)
         KontaktOfflineSyncWorker.schedule(context)
-        KontaktOfflineSyncWorker.triggerImmediateSync(context)
+        KontaktOfflineSyncWorker.forceImmediateSync(context)
         call.resolve()
     }
 
