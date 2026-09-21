@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
+import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.work.Constraints
@@ -140,6 +141,9 @@ class ObjektOfflineSyncWorker(
             prefs.edit().putBoolean(PREF_OBJECT_CACHE_CLEARING, true).apply()
             Handler(Looper.getMainLooper()).post {
                 val finished = AtomicBoolean(false)
+                // A device-login session is set by the remote WebView. Persist
+                // any pending cookie writes before this separate WebView reads it.
+                CookieManager.getInstance().flush()
                 val webView = WebView(appContext)
                 fun finish(message: String) {
                     if (!finished.compareAndSet(false, true)) return
@@ -152,6 +156,11 @@ class ObjektOfflineSyncWorker(
                 webView.settings.javaScriptEnabled = true
                 webView.settings.domStorageEnabled = true
                 webView.addJavascriptInterface(object {
+                    @JavascriptInterface
+                    fun reportStatus(cached: Int, total: Int, activity: String) {
+                        OfflineCacheStatusStore.updateObjects(appContext, cached, total, activity.take(400))
+                    }
+
                     @JavascriptInterface fun done(ok: Boolean) {
                         webView.post {
                             finish(if (ok) "Objektcache wurde gelöscht" else "Objektcache konnte nicht vollständig gelöscht werden")
@@ -231,6 +240,9 @@ class ObjektOfflineSyncWorker(
         terminated: AtomicBoolean,
         webViewRef: AtomicReference<WebView?>,
     ) {
+        // The device-login session is stored in the process-wide CookieManager.
+        // Flushing before opening the headless WebView also covers a just-finished login.
+        CookieManager.getInstance().flush()
         val webView = WebView(applicationContext)
         webViewRef.set(webView)
         val finish = {
@@ -245,6 +257,16 @@ class ObjektOfflineSyncWorker(
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
         webView.addJavascriptInterface(object {
+            @JavascriptInterface
+            fun reportStatus(cached: Int, total: Int, activity: String) {
+                OfflineCacheStatusStore.updateObjects(
+                    applicationContext,
+                    cached,
+                    total,
+                    activity.take(400),
+                )
+            }
+
             @JavascriptInterface
             fun status(message: String) {
                 OfflineCacheStatusStore.logActivity(
