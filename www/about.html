@@ -168,6 +168,8 @@
       <div class="cache-activity__current" id="cacheCurrentActivity">Warte auf den nächsten Abgleich …</div>
       <ul class="cache-log" id="cacheLog"><li><span></span><span>Noch keine Cache-Aktivität aufgezeichnet</span></li></ul>
     </div>
+    <label class="toggle-row"><span>Objekte automatisch offline halten</span><span class="toggle"><input type="checkbox" id="objectSyncToggle" onchange="setObjectSyncEnabled(this.checked)"><span class="toggle-slider"></span></span></label>
+    <div style="margin-top:10px;"><button class="btn-ghost" style="width:100%;" id="btnClearObjectCache" onclick="clearObjectCache()">🗑 Objekt-Cache löschen</button></div>
     <div style="margin-top:12px;"><button class="btn-ghost" style="width:100%;" id="btnRefreshOfflineCache" onclick="refreshOfflineCache()">↻ Offline-Daten jetzt aktualisieren</button></div>
   </div>
 
@@ -290,10 +292,13 @@ async function updateOfflineCacheStatus() {
     const contactTotal = Number(status.contactsTotal || 0);
     const objectCached = Number(status.objectsCached || 0);
     const objectTotal = Number(status.objectsTotal || 0);
+    const objectSyncEnabled = status.objectSyncEnabled === true;
     document.getElementById('contactsCacheCount').textContent = contactCached + '/' + contactTotal;
     document.getElementById('objectsCacheCount').textContent = objectCached + '/' + objectTotal;
     document.getElementById('contactsCacheDetail').textContent = status.contactsError || formatCacheTime(status.contactsUpdatedAtMs);
     document.getElementById('objectsCacheDetail').textContent = formatCacheTime(status.objectsUpdatedAtMs);
+    document.getElementById('objectSyncToggle').checked = objectSyncEnabled;
+    document.getElementById('objectSyncToggle').disabled = status.objectCacheClearing === true;
     document.getElementById('cacheCurrentActivity').textContent = status.objectActivity || 'Offline-Datenstand wird im Hintergrund aktuell gehalten.';
     const ready = contactCached === contactTotal && objectCached === objectTotal && (contactTotal + objectTotal) > 0;
     badge.textContent = ready ? 'Offline bereit' : 'Wird aktualisiert';
@@ -325,6 +330,36 @@ async function refreshOfflineCache() {
   } finally {
     button.disabled = false;
     button.textContent = previous;
+  }
+}
+
+async function setObjectSyncEnabled(enabled) {
+  const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
+  if (!plugin?.setObjectSyncEnabled) return;
+  try {
+    await plugin.setObjectSyncEnabled({ enabled });
+    toast(enabled ? 'Objekt-Sync wurde aktiviert.' : 'Objekt-Sync wurde deaktiviert.');
+    await updateOfflineCacheStatus();
+  } catch (_) {
+    document.getElementById('objectSyncToggle').checked = !enabled;
+    toast('Objekt-Sync konnte nicht umgestellt werden.');
+  }
+}
+
+async function clearObjectCache() {
+  const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
+  const button = document.getElementById('btnClearObjectCache');
+  if (!plugin?.clearObjectCache || button.disabled) return;
+  if (!window.confirm('Den lokalen Objekt-Cache löschen? Kontakte und Anmeldung bleiben erhalten.')) return;
+  button.disabled = true;
+  try {
+    await plugin.clearObjectCache();
+    toast('Objekt-Cache wird gelöscht.');
+    await updateOfflineCacheStatus();
+  } catch (_) {
+    toast('Objekt-Cache konnte nicht gelöscht werden.');
+  } finally {
+    button.disabled = false;
   }
 }
 

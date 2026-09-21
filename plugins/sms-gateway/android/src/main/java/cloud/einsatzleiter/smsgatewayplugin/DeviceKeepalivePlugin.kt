@@ -156,6 +156,8 @@ class DeviceKeepalivePlugin : Plugin() {
                     contactStatus?.lastError?.let { put("contactsError", it) }
                     put("objectsCached", objects.cached)
                     put("objectsTotal", objects.total)
+                    put("objectSyncEnabled", ObjektOfflineSyncWorker.isEnabled(context))
+                    put("objectCacheClearing", ObjektOfflineSyncWorker.isCacheClearing(context))
                     objects.updatedAtMs?.let { put("objectsUpdatedAtMs", it) }
                     objects.activity?.let { put("objectActivity", it) }
                     put("activities", org.json.JSONArray().apply {
@@ -178,6 +180,28 @@ class DeviceKeepalivePlugin : Plugin() {
         ObjektOfflineSyncWorker.forceImmediateSync(context)
         KontaktOfflineSyncWorker.schedule(context)
         KontaktOfflineSyncWorker.forceImmediateSync(context)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun setObjectSyncEnabled(call: PluginCall) {
+        if (!call.hasOption("enabled")) return call.reject("enabled erforderlich")
+        ObjektOfflineSyncWorker.setEnabled(context, call.getBoolean("enabled", false) ?: false)
+        call.resolve(JSObject().apply { put("enabled", ObjektOfflineSyncWorker.isEnabled(context)) })
+    }
+
+    /** Used by the remote object precache before it starts a WebView-side sync. */
+    @PluginMethod
+    fun getObjectSyncSettings(call: PluginCall) {
+        call.resolve(JSObject().apply {
+            put("enabled", ObjektOfflineSyncWorker.isEnabled(context))
+            put("clearing", ObjektOfflineSyncWorker.isCacheClearing(context))
+        })
+    }
+
+    @PluginMethod
+    fun clearObjectCache(call: PluginCall) {
+        ObjektOfflineSyncWorker.clearCache(context)
         call.resolve()
     }
 

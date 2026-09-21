@@ -190,6 +190,11 @@ waitForCapacitor(async () => {
     setStatus('Anmelden…');
     await Preferences.set({ key: 'el_device_token', value: pinToken });
 
+    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    // Geräte sind für die Offline-Einsatzvorbereitung vorgesehen. Eine frühere,
+    // persönliche Einstellung darf eine neue Gerätekopplung nicht übernehmen.
+    if (DevKA) { try { await DevKA.setObjectSyncEnabled({ enabled: true }); } catch (_) {} }
+
     // Kombiniertes Geraet (Board + SMS-Gateway) per PIN gekoppelt: nur vorhanden,
     // wenn das Geraet auch als SMS-Gateway angelegt wurde (siehe geraet_login_pin_done.html).
     const pinGatewayToken = pinParams.get('pin_gateway_token');
@@ -207,7 +212,6 @@ waitForCapacitor(async () => {
       }
     }
 
-    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
     if (DevKA) { try { await DevKA.startKeepalive(); } catch (_) {} }
     const pinFcmToken = await registerPushToken();
     window.location.replace(withFcmParam(
@@ -333,17 +337,18 @@ function openPinPairing() {
 async function openAccountLogin() {
   try {
     const { Preferences } = window.Capacitor.Plugins;
+    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    // Persönliche Konten cachen Objekte nur nach expliziter Aktivierung in
+    // „Über die App“; Fahrzeug-/Geräte-Logins setzen diese Option dagegen ein.
+    if (DevKA) await DevKA.setObjectSyncEnabled({ enabled: false });
     await Preferences.set({ key: 'el_used_account_login', value: '1' });
     const enabled = document.getElementById('liveOptIn').checked;
     await Preferences.set({ key: 'el_live_enabled', value: enabled ? '1' : '0' });
     if (enabled) {
-      const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
       if (DevKA) await DevKA.startKeepalive();
     } else {
-      const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
       if (DevKA) await DevKA.stopKeepalive();
     }
-    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
     if (DevKA) await DevKA.scheduleKontaktSync();
   } catch (_) { /* Merken ist best-effort, Login funktioniert trotzdem */ }
   const fcmToken = await registerPushToken();
@@ -353,15 +358,14 @@ async function openAccountLogin() {
 async function finishAccountLiveChoice(enabled) {
   try {
     const { Preferences } = window.Capacitor.Plugins;
+    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (DevKA) await DevKA.setObjectSyncEnabled({ enabled: false });
     await Preferences.set({ key: 'el_live_enabled', value: enabled ? '1' : '0' });
     if (enabled) {
-      const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
       if (DevKA) await DevKA.startKeepalive();
     } else {
-      const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
       if (DevKA) await DevKA.stopKeepalive();
     }
-    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
     if (DevKA) await DevKA.scheduleKontaktSync();
   } catch (_) { /* Navigation bleibt auch ohne native Brücke möglich */ }
   setStatus('Anmelden…');
@@ -456,6 +460,7 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
     // Board ist die Hauptansicht; Gateway läuft ab jetzt im Hintergrund weiter.
     setStatus('Anmelden…');
     const CombinedKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (CombinedKA) { try { await CombinedKA.setObjectSyncEnabled({ enabled: true }); } catch (_) {} }
     if (CombinedKA) { try { await CombinedKA.startKeepalive(); } catch (_) {} }
     const combinedFcmToken = await registerPushToken();
     window.location.replace(withFcmParam(
@@ -486,6 +491,7 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
     await Preferences.set({ key: 'el_device_token', value: token });
     await Preferences.set({ key: 'el_base_url', value: parsed.origin });
     const UnitKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (UnitKA) { try { await UnitKA.setObjectSyncEnabled({ enabled: true }); } catch (_) {} }
     if (UnitKA) { try { await UnitKA.startKeepalive(); } catch (_) {} }
     const unitFcmToken = await registerPushToken();
     window.location.replace(withFcmParam(

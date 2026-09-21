@@ -34,6 +34,19 @@ object OfflineCacheStatusStore {
             .apply()
     }
 
+    fun clearObjects(context: Context) {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val activity = "Objektcache wurde gelöscht"
+        prefs.edit()
+            .remove(KEY_OBJECT_CACHED)
+            .remove(KEY_OBJECT_TOTAL)
+            .remove(KEY_OBJECT_UPDATED)
+            .remove(KEY_OBJECT_ACTIVITY)
+            .putString(KEY_CURRENT_ACTIVITY, activity)
+            .putString(KEY_ACTIVITIES, appendActivity(prefs.getString(KEY_ACTIVITIES, null), activity))
+            .apply()
+    }
+
     fun objectSnapshot(context: Context): ObjectSnapshot {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return ObjectSnapshot(

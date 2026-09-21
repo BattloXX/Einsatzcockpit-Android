@@ -33,11 +33,53 @@ class ObjektOfflineSyncWorker(
 
     companion object {
         private const val WORK_NAME = "objekt-offline-sync"
+        private const val IMMEDIATE_WORK_NAME = "$WORK_NAME-immediate"
+        private const val PREF_OBJECT_SYNC_ENABLED = "ec_object_sync_enabled"
+        private const val PREF_OBJECT_CACHE_CLEARING = "ec_object_cache_clearing"
         private const val INTERVAL_HOURS = 6L
         private const val TIMEOUT_MINUTES = 9L
 
+        private fun preferences(context: Context) = context.applicationContext
+            .getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
+
+        /** New installations follow the login type until the user makes an explicit choice. */
+        fun isEnabled(context: Context): Boolean {
+            val prefs = preferences(context)
+            return if (prefs.contains(PREF_OBJECT_SYNC_ENABLED)) {
+                prefs.getBoolean(PREF_OBJECT_SYNC_ENABLED, false)
+            } else {
+                !prefs.getString("el_device_token", null).isNullOrBlank()
+            }
+        }
+
+        fun isCacheClearing(context: Context): Boolean =
+            preferences(context).getBoolean(PREF_OBJECT_CACHE_CLEARING, false)
+
+        fun setEnabled(context: Context, enabled: Boolean) {
+            preferences(context).edit().putBoolean(PREF_OBJECT_SYNC_ENABLED, enabled).apply()
+            if (enabled) {
+                OfflineCacheStatusStore.logActivity(context, "Objekt-Sync wurde aktiviert")
+                schedule(context)
+                forceImmediateSync(context)
+            } else {
+                cancel(context)
+                OfflineCacheStatusStore.logActivity(context, "Objekt-Sync wurde deaktiviert")
+            }
+        }
+
+        fun cancel(context: Context) {
+            WorkManager.getInstance(context.applicationContext).apply {
+                cancelUniqueWork(WORK_NAME)
+                cancelUniqueWork(IMMEDIATE_WORK_NAME)
+            }
+        }
+
         fun schedule(context: Context) {
-            val prefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
+            if (!isEnabled(context)) {
+                cancel(context)
+                return
+            }
+            val prefs = preferences(context)
             if (prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null).isNullOrBlank()) {
                 OfflineCacheStatusStore.logActivity(context, "Objekt-Sync wartet auf die Anmeldung")
                 return
@@ -61,11 +103,12 @@ class ObjektOfflineSyncWorker(
 
         /** Starts one Android WebView sync after login instead of waiting for the 6 h interval. */
         fun triggerImmediateSync(context: Context) {
+            if (!isEnabled(context)) return
             val request = OneTimeWorkRequestBuilder<ObjektOfflineSyncWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
-                "$WORK_NAME-immediate",
+                IMMEDIATE_WORK_NAME,
                 ExistingWorkPolicy.KEEP,
                 request,
             )
@@ -73,19 +116,75 @@ class ObjektOfflineSyncWorker(
 
         /** A refresh initiated by the user must not remain behind a stale retry. */
         fun forceImmediateSync(context: Context) {
+            if (!isEnabled(context)) return
             val request = OneTimeWorkRequestBuilder<ObjektOfflineSyncWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
-                "$WORK_NAME-immediate",
+                IMMEDIATE_WORK_NAME,
                 ExistingWorkPolicy.REPLACE,
                 request,
             )
         }
+
+        /** Removes only the object precache; contacts and login data remain untouched. */
+        @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
+        fun clearCache(context: Context) {
+            val appContext = context.applicationContext
+            cancel(appContext)
+            OfflineCacheStatusStore.clearObjects(appContext)
+            val prefs = preferences(appContext)
+            val baseUrl = prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null)?.trimEnd('/')
+            if (baseUrl.isNullOrBlank()) return
+
+            prefs.edit().putBoolean(PREF_OBJECT_CACHE_CLEARING, true).apply()
+            Handler(Looper.getMainLooper()).post {
+                val finished = AtomicBoolean(false)
+                val webView = WebView(appContext)
+                fun finish(message: String) {
+                    if (!finished.compareAndSet(false, true)) return
+                    preferences(appContext).edit().putBoolean(PREF_OBJECT_CACHE_CLEARING, false).apply()
+                    OfflineCacheStatusStore.logActivity(appContext, message)
+                    webView.removeJavascriptInterface("ObjektCacheClearNative")
+                    webView.stopLoading()
+                    webView.destroy()
+                }
+                webView.settings.javaScriptEnabled = true
+                webView.settings.domStorageEnabled = true
+                webView.addJavascriptInterface(object {
+                    @JavascriptInterface fun done(ok: Boolean) {
+                        webView.post {
+                            finish(if (ok) "Objektcache wurde gelöscht" else "Objektcache konnte nicht vollständig gelöscht werden")
+                        }
+                    }
+                }, "ObjektCacheClearNative")
+                webView.webViewClient = object : WebViewClient() {
+                    private var invoked = false
+                    override fun onPageFinished(view: WebView, url: String) {
+                        if (invoked) return
+                        invoked = true
+                        view.evaluateJavascript(
+                            """
+                            Promise.resolve(typeof window.objektOfflineCacheLeeren === "function"
+                              ? window.objektOfflineCacheLeeren() : false)
+                              .then(function (ok) { ObjektCacheClearNative.done(ok === true); })
+                              .catch(function () { ObjektCacheClearNative.done(false); });
+                            """.trimIndent(),
+                            null,
+                        )
+                    }
+                }
+                Handler(Looper.getMainLooper()).postDelayed({
+                    finish("Objektcache konnte nicht vollständig gelöscht werden: Zeitlimit überschritten")
+                }, 20_000)
+                webView.loadUrl("$baseUrl/")
+            }
+        }
     }
 
     override fun doWork(): Result {
-        val prefs = applicationContext.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
+        if (!isEnabled(applicationContext)) return Result.success()
+        val prefs = preferences(applicationContext)
         if (prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null).isNullOrBlank()) {
             OfflineCacheStatusStore.logActivity(applicationContext, "Objekt-Sync übersprungen: App ist nicht angemeldet")
             WorkManager.getInstance(applicationContext).cancelUniqueWork(WORK_NAME)
