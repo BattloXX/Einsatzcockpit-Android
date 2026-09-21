@@ -177,8 +177,13 @@ class DeviceKeepalivePlugin : Plugin() {
     @PluginMethod
     fun refreshOfflineCache(call: PluginCall) {
         OfflineCacheStatusStore.logActivity(context, "Manueller Offline-Abgleich wurde gestartet")
-        ObjektOfflineSyncWorker.schedule(context)
-        ObjektOfflineSyncWorker.forceImmediateSync(context)
+        if (ObjektOfflineSyncWorker.isEnabled(context)) {
+            OfflineCacheStatusStore.logActivity(context, "Objekt-Sync wird für den manuellen Abgleich eingeplant")
+            ObjektOfflineSyncWorker.schedule(context)
+            ObjektOfflineSyncWorker.forceImmediateSync(context)
+        } else {
+            OfflineCacheStatusStore.logActivity(context, "Objekt-Sync ist deaktiviert – kein Objektabgleich gestartet")
+        }
         KontaktOfflineSyncWorker.schedule(context)
         KontaktOfflineSyncWorker.forceImmediateSync(context)
         call.resolve()
