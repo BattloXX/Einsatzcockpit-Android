@@ -14,6 +14,7 @@ Die App ist ein schlanker **Capacitor-Wrapper** um die bestehende Progressive We
 | **GPS-Standort im Einsatz** (Hintergrund, nur bei aktivem Einsatz) | Background Geolocation → Lagekarte |
 | **Bildschirm aktiv halten** (Atemschutz-Überwachung, Screensaver) | Native Wake Lock |
 | **SMS-Gateway-Modus** (Versand/Empfang über SIM-Karte des Geräts, 24/7-Dauerbetrieb) | Eigenes Capacitor-Plugin, persistente WebSocket-Verbindung zum Backend |
+| **Home-Screen-Widgets** (Kontakte, Objekte, Einsatzstatus, Fahrt erfassen — Direktzugriff ohne App zu öffnen) | `AppWidgetProvider` + `RemoteViews`, Deep-Link in die bestehende WebView-Session |
 | **Sideload-APK** (kein Play Store nötig) | Signierte APK via GitHub Actions, CalVer-Versionierung |
 
 > Die Web-App, das Dashboard und alle Browser-Nutzer funktionieren weiterhin unverändert. Diese App ist ein optionaler nativer Client für den Einsatzbetrieb.
@@ -249,6 +250,43 @@ Beim ersten Start (kein gespeicherter Token) bietet die App vier Anmeldewege:
 
 ---
 
+## Home-Screen-Widgets
+
+Vier Widgets lassen sich wie bei jeder Android-App per langem Druck auf den Homescreen →
+**Widgets** hinzufügen. Alle öffnen die App über einen Deep-Link (`ec-widget://open/...`),
+der die bestehende WebView-Session (Cookies) wiederverwendet — kein separater Login nötig.
+
+| Widget | Zeigt | Öffnet beim Antippen |
+|---|---|---|
+| **Kontakte** | Fixer Shortcut | `/kontakte` |
+| **Objekte** | Fixer Shortcut | `/objekte/` |
+| **Einsatzstatus** | Laufenden Einsatz (Stichwort, Adresse, Phase) oder „Kein aktiver Einsatz"; in der großen Darstellung zusätzlich eine Kartenvorschau | Laufenden Einsatz bzw. die Startseite |
+| **Fahrt erfassen** | „Fahrt erfassen", optional das Fahrzeug-Kurzzeichen als zweite Zeile | `/fahrtenbuch/neu` |
+
+Implementiert in `plugins/sms-gateway/android/.../smsgatewayplugin/EcpWidgetSupport.kt`
+(Kontakte/Objekte/Einsatzstatus) und `EcpFahrtWidget.kt` (Fahrt erfassen, inkl.
+Konfigurations-Activity).
+
+### Fahrt erfassen: Fahrzeugauswahl
+
+Beim Hinzufügen des Widgets öffnet sich ein Konfigurationsdialog, der optional ein
+Fallback-Fahrzeug für dieses Widget hinterlegen lässt (lädt die Fahrzeugliste der
+Organisation über `GET /api/v1/device/vehicles`, authentifiziert über den gemeinsamen
+`FcmTokenRegistration.getAuthHeader()`-Helfer — Geräte-Bearer-Token oder Sitzungs-Cookie,
+je nachdem was verfügbar ist). Welches Fahrzeug beim Öffnen tatsächlich vorausgewählt wird,
+folgt dieser Priorität (serverseitig entschieden in `/fahrtenbuch/neu`):
+
+1. **Geräte-Login-Fahrzeug** — ist das Gerät per QR/PIN-Pairing fest mit einem Fahrzeug
+   verknüpft, gewinnt dieses immer.
+2. **Widget-Konfiguration** — nur falls kein Geräte-Fahrzeug hinterlegt ist.
+3. **Manuelle Auswahl** — ist auch im Widget kein Fahrzeug hinterlegt, zeigt die Seite
+   selbst die Fahrzeugauswahl.
+
+Ist per Geräte-Login oder Widget-Konfiguration ein Fahrzeug bekannt, zeigt das Widget
+dessen Kurzzeichen als zweite Zeile an (z. B. „RLF").
+
+---
+
 ## Zugehöriges Backend-Repo
 
 [BattloXX/Einsatzcockpit](https://github.com/BattloXX/Einsatzcockpit) — FastAPI + PWA, der Server hinter dieser App (vormals „Einsatzleiter-Hilfswerkzeug", seit Rebrand 3.0.0 `einsatzcockpit.com`).
@@ -258,6 +296,7 @@ Backend-Endpoints für diese App (`app/routers/device_api.py`):
 - `POST /api/v1/device/location` — GPS-Position übermitteln
 - `POST /api/v1/device/duty` — Dienst-Status setzen (aktuell ohne Aufrufer in App/Admin-UI; `should_track` wird in der Praxis rein über `incident_active` gesteuert)
 - `GET /api/v1/device/duty-state` — Einsatz-/Dienst-Status abfragen (steuert Hintergrund-GPS und den Live-Poller)
+- `GET /api/v1/device/vehicles` — Fahrzeugliste der Organisation plus gebundenes Geräte-Fahrzeug (für die Fahrt-erfassen-Widget-Konfiguration)
 - `POST /api/v1/device/native-link` — kurzlebiges Token für PDF-Handoff an Custom-Tabs
 
 Details zur FCM-Nutzlast (Data-only statt Notification+Data) siehe `app/services/push_service.py::send_fcm` im Backend-Repo.
