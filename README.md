@@ -389,3 +389,9 @@ Route hängen geblieben sind:
   Service-Worker-Cache-Regel — bewusst mit niedriger, nicht-dringlicher
   WorkManager-Priorität, damit SMS-Gateway-Betrieb und der Live-Status-Refresh
   beim selben Push-Empfang unbeeinflusst bleiben.
+
+---
+
+## Lizenz
+
+**GNU Lesser General Public License v2.1 (LGPL-2.1)** — Johannes Battlogg.
