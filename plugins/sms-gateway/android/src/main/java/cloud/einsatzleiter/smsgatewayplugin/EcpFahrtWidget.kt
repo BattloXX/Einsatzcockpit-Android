@@ -13,12 +13,10 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import okhttp3.Call
 import okhttp3.Callback
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONObject
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 private const val FAHRT_WIDGET_PREFS = "ec_widget_fahrt_state"
 private const val VEHICLE_ID_PREFIX = "vehicle_id_"
@@ -61,12 +59,6 @@ class EcpFahrtWidgetConfigureActivity : AppCompatActivity() {
     private data class Vehicle(val id: Long, val code: String, val name: String)
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val client = OkHttpClient.Builder()
-        .cookieJar(WebViewCookieJar())
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
-        .build()
 
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
 
@@ -84,41 +76,71 @@ class EcpFahrtWidgetConfigureActivity : AppCompatActivity() {
         loadVehicles()
     }
 
-    override fun onDestroy() {
-        client.dispatcher.cancelAll()
-        super.onDestroy()
-    }
-
     private fun loadVehicles() {
         val prefs = getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
         val baseUrl = prefs.getString(EinsatzLivePoller.PREF_BASE_URL, "https://einsatzcockpit.com")
             ?.trimEnd('/')
         if (baseUrl.isNullOrBlank()) {
-            showVehicleChoices(emptyList(), null)
+            showVehicleChoices(
+                emptyList(),
+                null,
+                "Fahrzeugliste konnte nicht geladen werden (Server-URL fehlt).",
+            )
             return
         }
-        val deviceToken = prefs.getString("el_device_token", null)?.takeIf { it.isNotBlank() }
+        val authHeader = FcmTokenRegistration.getAuthHeader(this, baseUrl)
+        if (authHeader == null) {
+            showVehicleChoices(
+                emptyList(),
+                null,
+                "Keine Anmeldung gefunden – bitte die App einmal öffnen und anmelden.",
+            )
+            return
+        }
         val request = try {
             Request.Builder()
                 .url("$baseUrl/api/v1/device/vehicles")
                 .get()
-                .apply { deviceToken?.let { header("Authorization", "Bearer $it") } }
+                .header(authHeader.first, authHeader.second)
                 .build()
         } catch (_: IllegalArgumentException) {
-            showVehicleChoices(emptyList(), null)
+            showVehicleChoices(
+                emptyList(),
+                null,
+                "Fahrzeugliste konnte nicht geladen werden (ungültige Server-URL).",
+            )
             return
         }
-        client.newCall(request).enqueue(object : Callback {
+        FcmTokenRegistration.httpClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                mainHandler.post { showVehicleChoices(emptyList(), null) }
+                mainHandler.post {
+                    showVehicleChoices(
+                        emptyList(),
+                        null,
+                        "Fahrzeugliste konnte nicht geladen werden (keine Verbindung).",
+                    )
+                }
             }
 
             override fun onResponse(call: Call, response: Response) {
-                val result = response.use {
-                    if (!it.isSuccessful) null else parseVehicles(it.body?.string().orEmpty())
+                val result = try {
+                    response.use {
+                        if (!it.isSuccessful) {
+                            null to "Fahrzeugliste konnte nicht geladen werden (HTTP ${it.code})."
+                        } else {
+                            parseVehicles(it.body?.string().orEmpty())?.let { it to null }
+                                ?: (null to "Fahrzeugliste konnte nicht gelesen werden.")
+                        }
+                    }
+                } catch (_: IOException) {
+                    null to "Fahrzeugliste konnte nicht geladen werden (keine Verbindung)."
                 }
                 mainHandler.post {
-                    showVehicleChoices(result?.first.orEmpty(), result?.second)
+                    showVehicleChoices(
+                        result.first?.first.orEmpty(),
+                        result.first?.second,
+                        result.second,
+                    )
                 }
             }
         })
@@ -145,18 +167,21 @@ class EcpFahrtWidgetConfigureActivity : AppCompatActivity() {
         return Vehicle(optLong("id"), optString("code"), optString("name"))
     }
 
-    private fun showVehicleChoices(vehicles: List<Vehicle>, deviceVehicle: Vehicle?) {
+    private fun showVehicleChoices(
+        vehicles: List<Vehicle>,
+        deviceVehicle: Vehicle?,
+        message: String? = null,
+    ) {
         if (isFinishing || isDestroyed) return
         val choices = listOf("Kein Fahrzeug festlegen") + vehicles.map { "${it.code} – ${it.name}" }
         AlertDialog.Builder(this)
             .setTitle("Fahrt erfassen")
             .apply {
-                deviceVehicle?.let {
-                    setMessage(
-                        "Dieses Gerät ist bereits mit Fahrzeug ${it.code} verknüpft – " +
-                            "diese Auswahl wird dann nicht verwendet.",
-                    )
+                val dialogMessage = message ?: deviceVehicle?.let {
+                    "Dieses Gerät ist bereits mit Fahrzeug ${it.code} verknüpft – " +
+                        "diese Auswahl wird dann nicht verwendet."
                 }
+                if (dialogMessage != null) setMessage(dialogMessage)
             }
             .setItems(choices.toTypedArray()) { _, which ->
                 saveSelection(vehicles.getOrNull(which - 1))
