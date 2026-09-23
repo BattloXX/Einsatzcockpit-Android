@@ -17,6 +17,8 @@ import java.util.concurrent.TimeUnit
 
 /** Registriert FCM-Tokens mit der verfuegbaren nativen Anmeldung beim Backend. */
 object FcmTokenRegistration {
+    private const val PREF_DEVICE_STATUS_REPORTING_ENABLED = "ec_device_status_reporting_enabled"
+
     val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -38,9 +40,13 @@ object FcmTokenRegistration {
                 )))
                 return
             }
-            val body = JSONObject()
+            val json = JSONObject()
                 .put("token", token)
                 .put("platform", "android")
+            if (isDeviceStatusReportingEnabled(prefs)) {
+                installedAppVersion(context)?.let { json.put("app_version", it) }
+            }
+            val body = json
                 .toString()
                 .toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
@@ -109,5 +115,23 @@ object FcmTokenRegistration {
 
         val cookie = CookieManager.getInstance().getCookie(baseUrl)?.takeIf { it.isNotBlank() }
         return cookie?.let { "Cookie" to it }
+    }
+
+    private fun installedAppVersion(context: Context): String? {
+        return try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                ?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun isDeviceStatusReportingEnabled(prefs: android.content.SharedPreferences): Boolean {
+        return try {
+            prefs.getBoolean(PREF_DEVICE_STATUS_REPORTING_ENABLED, true)
+        } catch (_: ClassCastException) {
+            // Capacitor Preferences persists values as strings; native callers may use booleans.
+            prefs.getString(PREF_DEVICE_STATUS_REPORTING_ENABLED, null) != "false"
+        }
     }
 }

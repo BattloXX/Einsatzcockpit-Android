@@ -12,6 +12,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -29,6 +31,7 @@ class EinsatzLivePoller(
         const val PREF_LAST_OK_MS = "el_live_last_ok_ms"
         const val PREF_DISMISSED_INCIDENT_ID = "el_live_dismissed_incident_id"
         const val PREF_ENABLED = "el_live_enabled"
+        const val PREF_DEVICE_STATUS_REPORTING_ENABLED = "ec_device_status_reporting_enabled"
 
         private const val IDLE_INTERVAL_MS = 300_000L
         private const val ACTIVE_INTERVAL_MS = 30_000L
@@ -127,9 +130,16 @@ class EinsatzLivePoller(
         }
         log("Live-Poll wird versucht")
         val deviceToken = prefs.getString("el_device_token", null)?.takeIf { it.isNotBlank() }
+        val appVersion = reportedAppVersion()
+        val dutyStateUrl = if (appVersion == null) {
+            "$baseUrl/api/v1/device/duty-state"
+        } else {
+            val encodedVersion = URLEncoder.encode(appVersion, StandardCharsets.UTF_8.toString())
+            "$baseUrl/api/v1/device/duty-state?app_version=$encodedVersion"
+        }
         val request = try {
             Request.Builder()
-                .url("$baseUrl/api/v1/device/duty-state")
+                .url(dutyStateUrl)
                 .get()
                 .apply { deviceToken?.let { header("Authorization", "Bearer $it") } }
                 .build()
@@ -247,6 +257,25 @@ class EinsatzLivePoller(
     }
 
     private fun log(message: String) = SmsGatewayService.log(message)
+
+    private fun reportedAppVersion(): String? {
+        if (!isDeviceStatusReportingEnabled()) return null
+        return try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                ?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun isDeviceStatusReportingEnabled(): Boolean {
+        return try {
+            prefs.getBoolean(PREF_DEVICE_STATUS_REPORTING_ENABLED, true)
+        } catch (_: ClassCastException) {
+            // Capacitor Preferences persists values as strings; native callers may use booleans.
+            prefs.getString(PREF_DEVICE_STATUS_REPORTING_ENABLED, null) != "false"
+        }
+    }
 
     private fun formatTime(timestamp: Long): String =
         SimpleDateFormat("HH:mm", Locale.GERMANY).apply {

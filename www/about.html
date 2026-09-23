@@ -147,6 +147,7 @@
         <option value="prerelease">Prerelease (Beta)</option>
       </select>
     </div>
+    <label class="toggle-row"><span>Geräteinfo an Admin melden<br><small style="color:var(--faint);">App-Version und Login-Status in der Geräteverwaltung</small></span><span class="toggle"><input type="checkbox" id="deviceStatusReportingToggle" onchange="setDeviceStatusReportingEnabled(this.checked)"><span class="toggle-slider"></span></span></label>
     <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
       <button class="btn-ghost" style="flex:1;min-width:150px;" id="btnCheckUpdate" onclick="manualUpdateCheck()">🔄 Auf Update prüfen</button>
     </div>
@@ -294,6 +295,7 @@ waitForCapacitor(async () => {
   }
 
   await initializeUpdateChannelToggle();
+  await updateDeviceStatusReportingSetting();
   checkForUpdate();
   updatePushStatusBadge();
   updateAlarmStatus();
@@ -303,6 +305,34 @@ waitForCapacitor(async () => {
 
 function autoUpdateText(value, fallback = '–') {
   return value && String(value).trim() ? String(value) : fallback;
+}
+
+const DEVICE_STATUS_REPORTING_KEY = 'ec_device_status_reporting_enabled';
+
+async function updateDeviceStatusReportingSetting() {
+  const toggle = document.getElementById('deviceStatusReportingToggle');
+  if (!toggle || !Preferences) return;
+  try {
+    const { value } = await Preferences.get({ key: DEVICE_STATUS_REPORTING_KEY });
+    toggle.checked = value !== 'false';
+  } catch (_) {
+    toggle.checked = true;
+  }
+}
+
+async function setDeviceStatusReportingEnabled(enabled) {
+  const toggle = document.getElementById('deviceStatusReportingToggle');
+  if (!Preferences) return;
+  try {
+    await Preferences.set({
+      key: DEVICE_STATUS_REPORTING_KEY,
+      value: enabled ? 'true' : 'false',
+    });
+    toast(enabled ? 'Geräteinfo wird an die Administration gemeldet.' : 'Meldung der Geräteinfo wurde deaktiviert.');
+  } catch (_) {
+    if (toggle) toggle.checked = !enabled;
+    toast('Einstellung zur Geräteinfo konnte nicht gespeichert werden.');
+  }
 }
 
 async function updateAutoUpdateStatus() {
