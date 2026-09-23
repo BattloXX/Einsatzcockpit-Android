@@ -147,6 +147,27 @@
     </div>
   </div>
 
+  <div class="card" id="autoUpdateCard" style="display:none;">
+    <div class="card-label">⚙️ Auto-Update</div>
+    <div class="version-row">
+      <span class="version-label">Letzter Check</span>
+      <span class="version-value" id="autoUpdateChecked">Noch nicht geprüft</span>
+    </div>
+    <div class="version-row">
+      <span class="version-label">Release</span>
+      <span class="version-value" id="autoUpdateRelease">–</span>
+    </div>
+    <div class="version-row">
+      <span class="version-label">Download</span>
+      <span class="version-value" id="autoUpdateDownload">–</span>
+    </div>
+    <div class="version-row">
+      <span class="version-label">Installation</span>
+      <span class="version-value" id="autoUpdateInstall">–</span>
+    </div>
+    <p id="autoUpdateError" style="display:none;font-size:.82rem;color:var(--red);margin-top:10px;"></p>
+  </div>
+
   <div class="card" id="offlineCacheCard">
     <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
       <span>📦 Offline-Datenstand</span>
@@ -248,6 +269,7 @@ let SmsGateway;
 let AlarmChannel;
 let Preferences;
 let alarmDndSetupPending = false;
+let autoUpdateVariant = false;
 
 waitForCapacitor(async () => {
   Preferences = window.Capacitor.Plugins.Preferences;
@@ -269,6 +291,32 @@ waitForCapacitor(async () => {
   updateOfflineCacheStatus();
   setInterval(updateOfflineCacheStatus, 5000);
 });
+
+function autoUpdateText(value, fallback = '–') {
+  return value && String(value).trim() ? String(value) : fallback;
+}
+
+async function updateAutoUpdateStatus() {
+  if (!autoUpdateVariant) return;
+  const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
+  if (!plugin?.getAutoUpdateStatus) return;
+  try {
+    const status = await plugin.getAutoUpdateStatus();
+    document.getElementById('autoUpdateChecked').textContent = status.lastCheckedAtMs
+      ? formatCacheTime(status.lastCheckedAtMs)
+      : 'Noch nicht geprüft';
+    document.getElementById('autoUpdateRelease').textContent = status.releaseVersion
+      ? 'v' + status.releaseVersion
+      : '–';
+    document.getElementById('autoUpdateDownload').textContent = autoUpdateText(status.downloadResult, status.activity || '–');
+    document.getElementById('autoUpdateInstall').textContent = autoUpdateText(status.installResult);
+    const error = document.getElementById('autoUpdateError');
+    error.textContent = status.error || '';
+    error.style.display = status.error ? '' : 'none';
+  } catch (_) {
+    document.getElementById('autoUpdateChecked').textContent = 'Status nicht verfügbar';
+  }
+}
 
 function formatCacheTime(value) {
   if (!value) return 'Noch nicht synchronisiert';
@@ -643,8 +691,13 @@ async function checkForUpdate() {
   // Gateway-Verbindungsstatus - liest nur die lokale PackageInfo).
   if (SmsGateway && SmsGateway.getAppVersion) {
     try {
-      const { versionName } = await SmsGateway.getAppVersion();
+      const { versionName, autoUpdateEnabled } = await SmsGateway.getAppVersion();
       document.getElementById('installedVersion').textContent = 'v' + versionName;
+      autoUpdateVariant = autoUpdateEnabled === true;
+      if (autoUpdateVariant) {
+        document.getElementById('autoUpdateCard').style.display = '';
+        updateAutoUpdateStatus();
+      }
     } catch (_) {
       document.getElementById('installedVersion').textContent = 'unbekannt';
     }

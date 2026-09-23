@@ -146,6 +146,13 @@ KEYSTORE_FILE (Base64)
 3. Im Backend: Admin → Geräte-Login → Neues Gerät erstellen → QR scannen
 4. App bleibt dauerhaft eingeloggt (Token gespeichert)
 
+### Auto-Update-APK
+
+Bei Verwendung von `einsatzcockpit-autoupdate-v*.apk` muss einmalig unter Android
+Einstellungen → Apps → Einsatzcockpit → „Unbekannte Apps installieren“ die Installation
+aus unbekannten Quellen erlaubt werden. Die App kann diese Freigabe nicht selbst setzen;
+sie wird für ihre späteren Hintergrund-Updates benötigt.
+
 ## SMS-Gateway: zuverlässiger 24/7-Dauerbetrieb
 
 Der SMS-Gateway-Modus hält eine persistente WebSocket-Verbindung zum Server. Damit Android

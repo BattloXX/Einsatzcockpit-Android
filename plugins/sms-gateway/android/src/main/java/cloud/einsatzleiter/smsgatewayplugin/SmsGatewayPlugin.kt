@@ -182,6 +182,7 @@ class SmsGatewayPlugin : Plugin() {
             val pi = context.packageManager.getPackageInfo(context.packageName, 0)
             call.resolve(JSObject().apply {
                 put("versionName", pi.versionName ?: "unbekannt")
+                put("autoUpdateEnabled", context.resources.getBoolean(R.bool.auto_update_enabled))
             })
         } catch (e: Exception) {
             call.reject("Version nicht abrufbar: ${e.message}")

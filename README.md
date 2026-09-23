@@ -214,6 +214,12 @@ Damit die App GPS-Koordinaten auch bei gesperrtem Display sendet, muss in den **
 3. **Einstellungen → Sicherheit → Unbekannte Quellen** erlauben (einmalig)
 4. APK antippen → installieren
 
+### Auto-Update-APK
+
+Für `einsatzcockpit-autoupdate-v*.apk` muss einmalig in den Android-Systemeinstellungen
+für Einsatzcockpit **„Installation unbekannter Apps“** erlaubt werden. Diese Berechtigung
+kann sich eine App nicht selbst erteilen; sie ist für spätere Hintergrund-Updates nötig.
+
 ---
 
 ## Erster Start & Login

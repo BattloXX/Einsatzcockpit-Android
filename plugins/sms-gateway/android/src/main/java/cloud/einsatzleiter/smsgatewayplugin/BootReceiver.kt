@@ -19,6 +19,9 @@ class BootReceiver : BroadcastReceiver() {
 
         val prefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
         ObjektOfflineSyncWorker.schedule(context)
+        if (context.resources.getBoolean(R.bool.auto_update_enabled)) {
+            AutoUpdateWorker.schedule(context)
+        }
         val gwUrl       = prefs.getString("el_gateway_url",   null)
         val gwToken     = prefs.getString("el_gateway_token", null)
         var shouldLaunch = false
