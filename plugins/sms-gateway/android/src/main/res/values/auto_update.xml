@@ -1,0 +1,5 @@
+<resources>
+    <!-- CI patches this file in-place to true for the Auto-Update APK build pass
+         (build-apk.yml); this default only applies locally / to the Standard APK. -->
+    <bool name="auto_update_enabled">false</bool>
+</resources>

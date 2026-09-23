@@ -115,6 +115,10 @@
             android:exported="false" />
 
         <receiver
+            android:name="cloud.einsatzleiter.smsgatewayplugin.AutoUpdateInstallReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name="cloud.einsatzleiter.smsgatewayplugin.EcpKontakteWidgetProvider"
             android:exported="false"
             android:label="ECP Kontakte">

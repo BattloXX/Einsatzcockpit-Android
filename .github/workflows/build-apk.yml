@@ -149,18 +149,86 @@ jobs:
           print("Hinzugefuegt:" if added else "Alle Berechtigungen vorhanden.", added)
           EOF
 
-      - name: Build APK
+      - name: Build Standard-APK
         working-directory: android
         run: |
+          # auto_update_enabled wird von Kotlin-Code IM Plugin-Modul gelesen
+          # (R.bool.auto_update_enabled in cloud.einsatzleiter.smsgatewayplugin) -
+          # nicht-transitive R-Klassen bedeuten, dass nur die Ressource DIESES
+          # Gradle-Moduls zaehlt, eine Ressource im App-Modul (app/src/...) hat
+          # darauf keinen Effekt. Deshalb hier die Plugin-eigene Datei patchen,
+          # siehe capacitor.settings.gradle: projectDir = '../plugins/sms-gateway/android'.
+          mkdir -p ../plugins/sms-gateway/android/src/main/res/values
+          cat > ../plugins/sms-gateway/android/src/main/res/values/auto_update.xml <<'EOF'
+          <resources>
+              <bool name="auto_update_enabled">false</bool>
+          </resources>
+          EOF
           if [ "$HAS_KEYSTORE" = "true" ]; then
             echo "Release-Build"
             ./gradlew assembleRelease
+            cp app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/app-release-standard-unsigned.apk
           else
             echo "Kein Keystore-Secret - Debug-APK (sideloadbar)"
             ./gradlew assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/app-debug-standard.apk
           fi
 
-      - name: Sign Release APK
+      - name: Build Auto-Update-APK
+        working-directory: android
+        run: |
+          python3 - <<'EOF'
+          import re
+
+          resource_path = "../plugins/sms-gateway/android/src/main/res/values/auto_update.xml"
+          with open(resource_path, encoding="utf-8") as f:
+              resource = f.read()
+          resource = re.sub(
+              r'<bool name="auto_update_enabled">(?:true|false)</bool>',
+              '<bool name="auto_update_enabled">true</bool>',
+              resource,
+          )
+          with open(resource_path, "w", encoding="utf-8") as f:
+              f.write(resource)
+
+          manifest_path = "app/src/main/AndroidManifest.xml"
+          with open(manifest_path, encoding="utf-8") as f:
+              manifest = f.read()
+          PERMISSIONS = ["android.permission.REQUEST_INSTALL_PACKAGES"]
+          for perm in PERMISSIONS:
+              if perm not in manifest:
+                  manifest = manifest.replace(
+                      "</manifest>",
+                      f'    <uses-permission android:name="{perm}" />\n</manifest>',
+                  )
+          with open(manifest_path, "w", encoding="utf-8") as f:
+              f.write(manifest)
+
+          strings_path = "app/src/main/res/values/strings.xml"
+          with open(strings_path, encoding="utf-8") as f:
+              strings = f.read()
+          strings, changed = re.subn(
+              r'(<string name="app_name">)(.*?)(</string>)',
+              lambda match: match.group(1) + match.group(2).replace(" (Auto-Update)", "") + " (Auto-Update)" + match.group(3),
+              strings,
+              count=1,
+          )
+          if changed != 1:
+              raise SystemExit("App-Label in strings.xml nicht gefunden")
+          with open(strings_path, "w", encoding="utf-8") as f:
+              f.write(strings)
+          EOF
+          if [ "$HAS_KEYSTORE" = "true" ]; then
+            echo "Release-Build (Auto-Update)"
+            ./gradlew assembleRelease
+            cp app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/app-release-autoupdate-unsigned.apk
+          else
+            echo "Kein Keystore-Secret - Debug-APK (Auto-Update)"
+            ./gradlew assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/app-debug-autoupdate.apk
+          fi
+
+      - name: Sign Release APKs
         if: ${{ env.HAS_KEYSTORE == 'true' }}
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_FILE }}
@@ -193,8 +261,14 @@ jobs:
             --ks /tmp/keystore.jks \
             --ks-pass "env:KEYSTORE_PASSWORD" \
             --ks-key-alias "$KEY_ALIAS" \
-            --out android/app/build/outputs/apk/release/app-release-signed.apk \
-            android/app/build/outputs/apk/release/app-release-unsigned.apk
+            --out android/app/build/outputs/apk/release/app-release-standard-signed.apk \
+            android/app/build/outputs/apk/release/app-release-standard-unsigned.apk
+          "$APKSIGNER" sign \
+            --ks /tmp/keystore.jks \
+            --ks-pass "env:KEYSTORE_PASSWORD" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --out android/app/build/outputs/apk/release/app-release-autoupdate-signed.apk \
+            android/app/build/outputs/apk/release/app-release-autoupdate-unsigned.apk
           rm -f /tmp/keystore.jks
 
       - name: APK-Dateien mit Versionsnummer benennen
@@ -203,17 +277,26 @@ jobs:
           # die Versionsnummer im Dateinamen tragen (z.B. beim direkten Download
           # von der Releases-Seite erkennbar, ohne die Release-Beschreibung zu lesen).
           cd android/app/build/outputs/apk
-          if [ -f release/app-release-signed.apk ]; then
-            cp release/app-release-signed.apk "release/einsatzcockpit-v${APP_VERSION}.apk"
+          if [ -f release/app-release-standard-signed.apk ]; then
+            cp release/app-release-standard-signed.apk "release/einsatzcockpit-v${APP_VERSION}.apk"
           fi
-          if [ -f release/app-release-unsigned.apk ]; then
-            cp release/app-release-unsigned.apk "release/einsatzcockpit-v${APP_VERSION}-unsigned.apk"
+          if [ -f release/app-release-standard-unsigned.apk ]; then
+            cp release/app-release-standard-unsigned.apk "release/einsatzcockpit-v${APP_VERSION}-unsigned.apk"
           fi
-          if [ -f debug/app-debug.apk ]; then
-            cp debug/app-debug.apk "debug/einsatzcockpit-v${APP_VERSION}-debug.apk"
+          if [ -f release/app-release-autoupdate-signed.apk ]; then
+            cp release/app-release-autoupdate-signed.apk "release/einsatzcockpit-autoupdate-v${APP_VERSION}.apk"
+          fi
+          if [ -f release/app-release-autoupdate-unsigned.apk ]; then
+            cp release/app-release-autoupdate-unsigned.apk "release/einsatzcockpit-autoupdate-v${APP_VERSION}-unsigned.apk"
+          fi
+          if [ -f debug/app-debug-standard.apk ]; then
+            cp debug/app-debug-standard.apk "debug/einsatzcockpit-v${APP_VERSION}-debug.apk"
+          fi
+          if [ -f debug/app-debug-autoupdate.apk ]; then
+            cp debug/app-debug-autoupdate.apk "debug/einsatzcockpit-autoupdate-v${APP_VERSION}-debug.apk"
           fi
 
-      - name: Upload APK Artifact
+      - name: Upload Standard-APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: einsatzcockpit-v${{ env.APP_VERSION }}
@@ -222,11 +305,22 @@ jobs:
             android/app/build/outputs/apk/release/einsatzcockpit-v${{ env.APP_VERSION }}-unsigned.apk
             android/app/build/outputs/apk/debug/einsatzcockpit-v${{ env.APP_VERSION }}-debug.apk
 
+      - name: Upload Auto-Update-APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: einsatzcockpit-autoupdate-v${{ env.APP_VERSION }}
+          path: |
+            android/app/build/outputs/apk/release/einsatzcockpit-autoupdate-v${{ env.APP_VERSION }}.apk
+            android/app/build/outputs/apk/release/einsatzcockpit-autoupdate-v${{ env.APP_VERSION }}-unsigned.apk
+            android/app/build/outputs/apk/debug/einsatzcockpit-autoupdate-v${{ env.APP_VERSION }}-debug.apk
+
       - name: Create GitHub Release (nur auf Tags mit Keystore)
         if: ${{ startsWith(github.ref, 'refs/tags/') && env.HAS_KEYSTORE == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/release/einsatzcockpit-v${{ env.APP_VERSION }}.apk
+          files: |
+            android/app/build/outputs/apk/release/einsatzcockpit-v${{ env.APP_VERSION }}.apk
+            android/app/build/outputs/apk/release/einsatzcockpit-autoupdate-v${{ env.APP_VERSION }}.apk
           name: Einsatzcockpit Android ${{ github.ref_name }}
           body: |
             ## Einsatzcockpit Android ${{ github.ref_name }} (Build ${{ github.run_number }})

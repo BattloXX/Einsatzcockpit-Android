@@ -102,6 +102,9 @@ class DeviceKeepalivePlugin : Plugin() {
     fun startKeepalive(call: PluginCall) {
         ObjektOfflineSyncWorker.schedule(context)
         ObjektOfflineSyncWorker.triggerImmediateSync(context)
+        if (context.resources.getBoolean(R.bool.auto_update_enabled)) {
+            AutoUpdateWorker.schedule(context)
+        }
         KontaktOfflineSyncWorker.schedule(context)
         KontaktOfflineSyncWorker.forceImmediateSync(context)
         val intent = Intent(context, DeviceKeepaliveService::class.java).apply {
@@ -171,6 +174,20 @@ class DeviceKeepalivePlugin : Plugin() {
                 call.reject(error.message ?: "Offline-Cache-Status konnte nicht gelesen werden")
             }
         }
+    }
+
+    /** Returns the native background update activity for the local about screen. */
+    @PluginMethod
+    fun getAutoUpdateStatus(call: PluginCall) {
+        val status = AutoUpdateStatusStore.snapshot(context)
+        call.resolve(JSObject().apply {
+            status.lastCheckedAtMs?.let { put("lastCheckedAtMs", it) }
+            status.releaseVersion?.let { put("releaseVersion", it) }
+            status.downloadResult?.let { put("downloadResult", it) }
+            status.installResult?.let { put("installResult", it) }
+            status.error?.let { put("error", it) }
+            status.activity?.let { put("activity", it) }
+        })
     }
 
     /** Lets the about screen start both offline synchronizers and record that request. */

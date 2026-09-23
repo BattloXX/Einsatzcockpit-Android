@@ -73,6 +73,8 @@ class SmsGatewayService : Service() {
 
         // ── Zustand (von Plugin abgelesen) ────────────────────────────────────
         @Volatile var isConnected = false
+        /** Read by the update worker so an APK install never interrupts a reconnect. */
+        @Volatile var connectingSince: Long = 0L
         @Volatile var lastError: String? = null
         val sentCount = AtomicInteger(0)
         @Volatile var lastSentTo: String? = null
@@ -158,7 +160,6 @@ class SmsGatewayService : Service() {
     // Verhindert dass mehrere Quellen (Watchdog, Reconnect, NetworkCallback) gleichzeitig
     // einen WebSocket aufbauen und dadurch doppelte/tote Verbindungen entstehen.
     @Volatile private var connecting = false
-    @Volatile private var connectingSince: Long = 0L
     @Volatile private var lastMessageAt: Long = 0L
 
     private var reconnectDelay = 1000L   // ms, verdoppelt bis max 30 000 ms
