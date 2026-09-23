@@ -140,7 +140,11 @@ class KontaktSyncEngine(
             }
             val changes = parseChanges(root.getJSONArray("changes"))
             db.withTransaction {
-                changes.forEach { change -> applyChange(db.kontaktDao(), change) }
+                val (kontaktChanges, zuordnungChanges) = changes.partition {
+                    it is Change.KontaktUpsert || it is Change.KontaktTombstone
+                }
+                kontaktChanges.forEach { change -> applyChange(db.kontaktDao(), change) }
+                zuordnungChanges.forEach { change -> applyChange(db.kontaktDao(), change) }
                 db.syncStatusDao().put(successStatus(
                     cursor = envelope.cursor,
                     schemaVersion = envelope.schemaVersion,
