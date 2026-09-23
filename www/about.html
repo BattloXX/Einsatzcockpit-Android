@@ -75,6 +75,7 @@
     .version-value { font-family: var(--mono); color: var(--text); }
     .update-available { color: var(--yellow); }
     .up-to-date { color: var(--green); }
+    .update-channel-select { background:var(--s2); border:1px solid var(--border); border-radius:7px; color:var(--text); font:inherit; padding:6px 8px; }
 
     /* ── Gateway-Status ──────────────────────────────────────────────────── */
     .badge-soft {
@@ -138,6 +139,13 @@
     <div class="version-row">
       <span class="version-label">Verfügbar</span>
       <span class="version-value" id="availableVersion">Prüfe…</span>
+    </div>
+    <div class="version-row">
+      <label class="version-label" for="updateChannel">Kanal</label>
+      <select class="update-channel-select" id="updateChannel" onchange="setUpdateChannel(this.value)">
+        <option value="stable">Stable</option>
+        <option value="prerelease">Prerelease (Beta)</option>
+      </select>
     </div>
     <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
       <button class="btn-ghost" style="flex:1;min-width:150px;" id="btnCheckUpdate" onclick="manualUpdateCheck()">🔄 Auf Update prüfen</button>
@@ -285,6 +293,7 @@ waitForCapacitor(async () => {
     updateGatewayStatus();
   }
 
+  await initializeUpdateChannelToggle();
   checkForUpdate();
   updatePushStatusBadge();
   updateAlarmStatus();
@@ -663,92 +672,6 @@ function goBack() {
   }
 }
 
-// ── App-Update-Check (identische Logik wie gateway.html) ─────────────────────
-const GITHUB_REPO = 'BattloXX/Einsatzcockpit-Android';
-let latestApkUrl = null;
-
-async function manualUpdateCheck() {
-  const btn = document.getElementById('btnCheckUpdate');
-  if (btn.disabled) return;
-  btn.disabled = true;
-  const prev = btn.textContent;
-  btn.textContent = '⏳ Prüfe…';
-  document.getElementById('availableVersion').textContent = 'Prüfe…';
-  document.getElementById('availableVersion').className = 'version-value';
-  document.getElementById('updateBtnRow').style.display = 'none';
-  try {
-    await checkForUpdate();
-    const av = document.getElementById('availableVersion').textContent;
-    toast(av.includes('✓') ? '✓ App ist aktuell' : 'Update verfügbar: ' + av);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = prev;
-  }
-}
-
-async function checkForUpdate() {
-  // Installierte Version via Plugin (getAppVersion ist unabhaengig vom
-  // Gateway-Verbindungsstatus - liest nur die lokale PackageInfo).
-  if (SmsGateway && SmsGateway.getAppVersion) {
-    try {
-      const { versionName, autoUpdateEnabled } = await SmsGateway.getAppVersion();
-      document.getElementById('installedVersion').textContent = 'v' + versionName;
-      autoUpdateVariant = autoUpdateEnabled === true;
-      if (autoUpdateVariant) {
-        document.getElementById('autoUpdateCard').style.display = '';
-        updateAutoUpdateStatus();
-      }
-    } catch (_) {
-      document.getElementById('installedVersion').textContent = 'unbekannt';
-    }
-  }
-
-  // Neueste Release von GitHub
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-    let res;
-    try {
-      res = await fetch(
-        'https://api.github.com/repos/' + GITHUB_REPO + '/releases/latest',
-        { headers: { Accept: 'application/vnd.github+json' }, signal: controller.signal }
-      );
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const rel = await res.json();
-    const latestTag = rel.tag_name || '–';
-
-    const asset = (rel.assets || []).find(a => a.name.endsWith('.apk'));
-    if (asset) latestApkUrl = asset.browser_download_url;
-
-    const installedEl = document.getElementById('installedVersion');
-    const availableEl = document.getElementById('availableVersion');
-
-    const installedVer = installedEl.textContent.replace(/^v/, '');
-    const latestVer    = latestTag.replace(/^v/, '');
-
-    if (latestVer && installedVer !== '–' && installedVer !== 'unbekannt' && latestVer !== installedVer) {
-      availableEl.textContent = latestTag;
-      availableEl.className = 'version-value update-available';
-      document.getElementById('updateBtnRow').style.display = '';
-    } else {
-      availableEl.textContent = latestTag + ' ✓';
-      availableEl.className = 'version-value up-to-date';
-    }
-  } catch (e) {
-    const grund = e && e.name === 'AbortError' ? 'Zeitüberschreitung' : (e && e.message) || 'unbekannter Fehler';
-    document.getElementById('availableVersion').textContent = 'Nicht abrufbar (' + grund + ')';
-    document.getElementById('availableVersion').className = 'version-value';
-  }
-}
-
-function downloadApk() {
-  if (latestApkUrl) window.open(latestApkUrl, '_system');
-  else toast('Kein Download-Link verfügbar');
-}
-
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function toast(msg, ms = 2500) {
   const el = document.getElementById('toast');
@@ -757,5 +680,6 @@ function toast(msg, ms = 2500) {
   setTimeout(() => el.classList.remove('show'), ms);
 }
 </script>
+<script src="js/update-check.js"></script>
 </body>
 </html>
