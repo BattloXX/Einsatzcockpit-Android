@@ -663,10 +663,17 @@ async function checkForUpdate() {
 
   // Neueste Release von GitHub
   try {
-    const res = await fetch(
-      'https://api.github.com/repos/' + GITHUB_REPO + '/releases/latest',
-      { headers: { Accept: 'application/vnd.github+json' } }
-    );
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    let res;
+    try {
+      res = await fetch(
+        'https://api.github.com/repos/' + GITHUB_REPO + '/releases/latest',
+        { headers: { Accept: 'application/vnd.github+json' }, signal: controller.signal }
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const rel = await res.json();
     const latestTag = rel.tag_name || '–';
@@ -689,8 +696,9 @@ async function checkForUpdate() {
       availableEl.textContent = latestTag + ' ✓';
       availableEl.className = 'version-value up-to-date';
     }
-  } catch (_) {
-    document.getElementById('availableVersion').textContent = 'Nicht abrufbar';
+  } catch (e) {
+    const grund = e && e.name === 'AbortError' ? 'Zeitüberschreitung' : (e && e.message) || 'unbekannter Fehler';
+    document.getElementById('availableVersion').textContent = 'Nicht abrufbar (' + grund + ')';
     document.getElementById('availableVersion').className = 'version-value';
   }
 }
