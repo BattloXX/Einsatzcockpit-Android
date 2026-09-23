@@ -8,7 +8,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.widget.ArrayAdapter
+import android.widget.ListView
 import android.widget.RemoteViews
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import okhttp3.Call
@@ -174,20 +177,28 @@ class EcpFahrtWidgetConfigureActivity : AppCompatActivity() {
     ) {
         if (isFinishing || isDestroyed) return
         val choices = listOf("Kein Fahrzeug festlegen") + vehicles.map { "${it.code} – ${it.name}" }
-        AlertDialog.Builder(this)
+        val dialogMessage = message ?: deviceVehicle?.let {
+            "Dieses Gerät ist bereits mit Fahrzeug ${it.code} verknüpft – " +
+                "diese Auswahl wird dann nicht verwendet."
+        }
+        val view = layoutInflater.inflate(R.layout.ec_dialog_fahrt_auswahl, null)
+        val messageView = view.findViewById<TextView>(R.id.dialog_message)
+        val listView = view.findViewById<ListView>(R.id.dialog_list)
+        if (dialogMessage != null) {
+            messageView.text = dialogMessage
+            messageView.visibility = View.VISIBLE
+        }
+        listView.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, choices)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Fahrt erfassen")
-            .apply {
-                val dialogMessage = message ?: deviceVehicle?.let {
-                    "Dieses Gerät ist bereits mit Fahrzeug ${it.code} verknüpft – " +
-                        "diese Auswahl wird dann nicht verwendet."
-                }
-                if (dialogMessage != null) setMessage(dialogMessage)
-            }
-            .setItems(choices.toTypedArray()) { _, which ->
-                saveSelection(vehicles.getOrNull(which - 1))
-            }
+            .setView(view)
             .setOnCancelListener { finish() }
-            .show()
+            .create()
+        listView.setOnItemClickListener { _, _, position, _ ->
+            saveSelection(vehicles.getOrNull(position - 1))
+            dialog.dismiss()
+        }
+        dialog.show()
     }
 
     private fun saveSelection(vehicle: Vehicle?) {
