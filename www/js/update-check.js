@@ -38,7 +38,17 @@ async function manualUpdateCheck() {
   document.getElementById('availableVersion').className = 'version-value';
   document.getElementById('updateBtnRow').style.display = 'none';
   try {
-    await checkForUpdate();
+    const autoUpdateEnabled = await checkForUpdate();
+    if (autoUpdateEnabled) {
+      try {
+        await window.Capacitor?.Plugins?.DeviceKeepalive?.triggerAutoUpdateCheck?.();
+      } catch (_) {
+        // The informational release check remains useful when the native trigger fails.
+      }
+      setTimeout(() => {
+        if (typeof updateAutoUpdateStatus === 'function') updateAutoUpdateStatus();
+      }, 2000);
+    }
     const av = document.getElementById('availableVersion').textContent;
     toast(av.includes('✓') ? '✓ App ist aktuell' : 'Update verfügbar: ' + av);
   } finally {
@@ -116,6 +126,8 @@ async function checkForUpdate() {
     document.getElementById('availableVersion').textContent = 'Nicht abrufbar (' + grund + ')';
     document.getElementById('availableVersion').className = 'version-value';
   }
+
+  return autoUpdateEnabled;
 }
 
 function downloadApk() {

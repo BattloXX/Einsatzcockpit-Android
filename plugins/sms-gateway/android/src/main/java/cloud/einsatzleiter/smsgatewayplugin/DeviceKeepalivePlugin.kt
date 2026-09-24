@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
  *   DeviceKeepalive.registerFcmToken() – registriert den aktuellen FCM-Token beim Server
  *   DeviceKeepalive.getPushToken()     – liest den aktuellen FCM-Token ohne Berechtigungsdialog
  *   DeviceKeepalive.getPushStatus()    – prüft die Registrierung des FCM-Tokens beim Server
+ *   DeviceKeepalive.triggerAutoUpdateCheck() – startet eine sofortige Auto-Update-Prüfung
  *   DeviceKeepalive.openOfflineKontakte() – öffnet die native Offline-Kontaktansicht
  *
  * Wird bei App-Start reaktiv aufgerufen; der Service beendet sich nach einer
@@ -188,6 +189,13 @@ class DeviceKeepalivePlugin : Plugin() {
             status.error?.let { put("error", it) }
             status.activity?.let { put("activity", it) }
         })
+    }
+
+    /** Starts a one-time native APK update check without changing the periodic schedule. */
+    @PluginMethod
+    fun triggerAutoUpdateCheck(call: PluginCall) {
+        AutoUpdateWorker.triggerImmediateCheck(context)
+        call.resolve()
     }
 
     /** Lets the about screen start both offline synchronizers and record that request. */

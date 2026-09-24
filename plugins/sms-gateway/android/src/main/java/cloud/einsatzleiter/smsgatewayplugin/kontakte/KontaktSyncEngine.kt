@@ -140,11 +140,12 @@ class KontaktSyncEngine(
             }
             val changes = parseChanges(root.getJSONArray("changes"))
             db.withTransaction {
-                val (kontaktChanges, zuordnungChanges) = changes.partition {
-                    it is Change.KontaktUpsert || it is Change.KontaktTombstone
-                }
-                kontaktChanges.forEach { change -> applyChange(db.kontaktDao(), change) }
-                zuordnungChanges.forEach { change -> applyChange(db.kontaktDao(), change) }
+                val kontaktUpserts = changes.filter { it is Change.KontaktUpsert }
+                val remainingChanges = changes.filter { it !is Change.KontaktUpsert }
+                // Upserts must precede mappings (PR #49), but moving tombstones ahead would
+                // delete a contact before an earlier mapping in the same feed can be applied.
+                kontaktUpserts.forEach { change -> applyChange(db.kontaktDao(), change) }
+                remainingChanges.forEach { change -> applyChange(db.kontaktDao(), change) }
                 db.syncStatusDao().put(successStatus(
                     cursor = envelope.cursor,
                     schemaVersion = envelope.schemaVersion,

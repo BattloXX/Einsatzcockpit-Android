@@ -6,8 +6,10 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.os.Build
 import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
@@ -28,6 +30,7 @@ class AutoUpdateWorker(
 
     companion object {
         private const val WORK_NAME = "apk-auto-update"
+        private const val IMMEDIATE_WORK_NAME = "apk-auto-update-immediate"
         private const val INTERVAL_HOURS = 12L
         private const val PREF_UPDATE_CHANNEL = "ec_update_channel"
         private const val RELEASES_URL = "https://api.github.com/repos/BattloXX/Einsatzcockpit-Android/releases"
@@ -46,6 +49,21 @@ class AutoUpdateWorker(
             WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
                 WORK_NAME,
                 ExistingPeriodicWorkPolicy.KEEP,
+                request,
+            )
+        }
+
+        /** A user-requested check must replace a stale retry instead of waiting behind it. */
+        fun triggerImmediateCheck(context: Context) {
+            if (!context.resources.getBoolean(R.bool.auto_update_enabled)) return
+            val request = OneTimeWorkRequestBuilder<AutoUpdateWorker>()
+                .setConstraints(
+                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+                )
+                .build()
+            WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+                IMMEDIATE_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
                 request,
             )
         }
