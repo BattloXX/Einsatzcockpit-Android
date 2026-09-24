@@ -266,7 +266,7 @@ der die bestehende WebView-Session (Cookies) wiederverwendet — kein separater 
 |---|---|---|
 | **Kontakte** | Fixer Shortcut | `/kontakte` |
 | **Objekte** | Fixer Shortcut | `/objekte/` |
-| **Einsatzstatus** | Laufenden Einsatz (Stichwort, Adresse, Phase) oder „Kein aktiver Einsatz"; in der großen Darstellung zusätzlich eine Kartenvorschau | Laufenden Einsatz bzw. die Startseite |
+| **Einsatzstatus** | Laufenden Einsatz (Stichwort, Adresse, Phase, Meldung) oder „Kein aktiver Einsatz"; Aktionen für Maps, Objekt/Alle Objekte und Fahrt erfassen. Bei einer Großschadenslage zeigt es die aktuelle sowie bis zu zwei folgende Einsatzstellen und weitere Warteschlangen-Einträge. | Einsatz, Lage-Board bzw. die jeweilige Aktion |
 | **Fahrt erfassen** | „Fahrt erfassen", optional das Fahrzeug-Kurzzeichen als zweite Zeile | `/fahrtenbuch/neu` |
 
 Implementiert in `plugins/sms-gateway/android/.../smsgatewayplugin/EcpWidgetSupport.kt`

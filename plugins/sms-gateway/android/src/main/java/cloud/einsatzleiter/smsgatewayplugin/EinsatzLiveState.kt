@@ -16,7 +16,14 @@ data class EinsatzLiveState(
     val phaseCount: Int,
     val phaseLabel: String,
     val incidentCount: Int,
-    val chronometerBase: Long
+    val chronometerBase: Long,
+    val lat: Double?,
+    val lng: Double?,
+    val gmapsUrl: String?,
+    val meldung: String?,
+    val objektId: Long?,
+    val objektName: String?,
+    val objektUrl: String?,
 ) {
     companion object {
         fun fromJson(root: JSONObject): EinsatzLiveState? {
@@ -25,6 +32,7 @@ data class EinsatzLiveState(
             val startedAt = incident.optString("started_at")
             val startedMs = parseUtc(startedAt) ?: return null
             val elapsed = (serverMs - startedMs).coerceAtLeast(0L)
+            val objekt = incident.optJSONObject("objekt")
             return EinsatzLiveState(
                 id = incident.getLong("id"),
                 url = incident.getString("url"),
@@ -35,7 +43,14 @@ data class EinsatzLiveState(
                 phaseCount = incident.optInt("phase_count", 4).coerceAtLeast(1),
                 phaseLabel = incident.optString("phase_label", "Einsatz läuft"),
                 incidentCount = root.optInt("incident_count", 1).coerceAtLeast(1),
-                chronometerBase = SystemClock.elapsedRealtime() - elapsed
+                chronometerBase = SystemClock.elapsedRealtime() - elapsed,
+                lat = incident.optDouble("lat", Double.NaN).takeIf { !it.isNaN() },
+                lng = incident.optDouble("lng", Double.NaN).takeIf { !it.isNaN() },
+                gmapsUrl = incident.optString("gmaps_url").takeIf { it.isNotBlank() },
+                meldung = incident.optString("meldung").takeIf { it.isNotBlank() },
+                objektId = objekt?.optLong("id", -1L)?.takeIf { it >= 0L },
+                objektName = objekt?.optString("name")?.takeIf { it.isNotBlank() },
+                objektUrl = objekt?.optString("url")?.takeIf { it.isNotBlank() },
             )
         }
 

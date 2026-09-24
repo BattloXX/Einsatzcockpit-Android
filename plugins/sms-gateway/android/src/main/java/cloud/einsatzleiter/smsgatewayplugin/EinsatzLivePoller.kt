@@ -183,7 +183,20 @@ class EinsatzLivePoller(
         }
         failures = 0
         val now = System.currentTimeMillis()
-        if (root.isNull("incident")) {
+        val hasIncident = !root.isNull("incident")
+        val hasGslQueue = !root.isNull("my_lage_queue")
+        val state = if (hasIncident) try { EinsatzLiveState.fromJson(root) } catch (_: Exception) { null } else null
+        if (hasIncident && state == null) {
+            handleNetworkFailure(baseUrl)
+            return
+        }
+        val gslQueue = if (hasGslQueue) try { GslQueueState.fromJson(root) } catch (_: Exception) { null } else null
+        if (gslQueue != null) {
+            EcpWidgetSupport.saveGslQueue(context, gslQueue)
+        } else {
+            EcpWidgetSupport.clearGslQueue(context)
+        }
+        if (state == null && gslQueue == null) {
             clearIncident()
             if (root.optBoolean("duty_active", false)) {
                 idleSinceMs = null
@@ -198,24 +211,21 @@ class EinsatzLivePoller(
             schedule(IDLE_INTERVAL_MS)
             return
         }
-        val state = try { EinsatzLiveState.fromJson(root) } catch (_: Exception) { null }
-        if (state == null) {
-            handleNetworkFailure(baseUrl)
-            return
+        state?.let { incident ->
+            val oldId = prefs.getString(PREF_INCIDENT_ID, null)
+            if (oldId != incident.id.toString()) {
+                prefs.edit().remove(PREF_DISMISSED_INCIDENT_ID).apply()
+            }
+            currentState = incident
+            prefs.edit()
+                .putString(PREF_INCIDENT_ID, incident.id.toString())
+                .putString(PREF_LAST_OK_MS, now.toString())
+                .apply()
+            EcpWidgetSupport.saveIncident(context, incident)
+            notifier.post(incident, baseUrl)
         }
-        val oldId = prefs.getString(PREF_INCIDENT_ID, null)
-        if (oldId != state.id.toString()) {
-            prefs.edit().remove(PREF_DISMISSED_INCIDENT_ID).apply()
-        }
-        currentState = state
         idleSinceMs = null
         onNeeded()
-        prefs.edit()
-            .putString(PREF_INCIDENT_ID, state.id.toString())
-            .putString(PREF_LAST_OK_MS, now.toString())
-            .apply()
-        EcpWidgetSupport.saveIncident(context, state)
-        notifier.post(state, baseUrl)
         schedule(ACTIVE_INTERVAL_MS)
     }
 
@@ -248,6 +258,7 @@ class EinsatzLivePoller(
             .remove(PREF_DISMISSED_INCIDENT_ID)
             .apply()
         EcpWidgetSupport.clearIncident(context)
+        EcpWidgetSupport.clearGslQueue(context)
     }
 
     private fun schedule(delayMs: Long) {
