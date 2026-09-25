@@ -16,6 +16,9 @@ object AutoUpdateStatusStore {
         prefs(context).edit()
             .putLong(KEY_LAST_CHECKED, System.currentTimeMillis())
             .putString(KEY_ACTIVITY, activity)
+            .remove(KEY_DOWNLOAD_RESULT)
+            .remove(KEY_INSTALL_RESULT)
+            .remove(KEY_ERROR)
             .apply()
     }
 
