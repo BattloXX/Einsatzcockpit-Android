@@ -18,6 +18,7 @@ object EcpWidgetSupport {
     private const val KEY_ALARM = "incident_alarm"
     private const val KEY_ADDRESS = "incident_address"
     private const val KEY_PHASE = "incident_phase"
+    private const val KEY_IS_EXERCISE = "incident_is_exercise"
     private const val KEY_LAT = "incident_lat"
     private const val KEY_LNG = "incident_lng"
     private const val KEY_GMAPS_URL = "incident_gmaps_url"
@@ -38,6 +39,7 @@ object EcpWidgetSupport {
         val alarmType: String,
         val address: String,
         val phase: String,
+        val isExercise: Boolean,
         val lat: Double?,
         val lng: Double?,
         val gmapsUrl: String?,
@@ -63,6 +65,7 @@ object EcpWidgetSupport {
             .putString(KEY_ALARM, state.alarmTypeCode)
             .putString(KEY_ADDRESS, state.address)
             .putString(KEY_PHASE, state.phaseLabel)
+            .putBoolean(KEY_IS_EXERCISE, state.isExercise)
             .putString(KEY_LAT, state.lat?.toString())
             .putString(KEY_LNG, state.lng?.toString())
             .putString(KEY_GMAPS_URL, state.gmapsUrl)
@@ -77,6 +80,7 @@ object EcpWidgetSupport {
     fun clearIncident(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(KEY_ID).remove(KEY_URL).remove(KEY_ALARM).remove(KEY_ADDRESS).remove(KEY_PHASE)
+            .remove(KEY_IS_EXERCISE)
             .remove(KEY_LAT).remove(KEY_LNG).remove(KEY_GMAPS_URL).remove(KEY_MELDUNG)
             .remove(KEY_OBJEKT_ID).remove(KEY_OBJEKT_NAME).remove(KEY_OBJEKT_URL)
             .apply()
@@ -94,6 +98,7 @@ object EcpWidgetSupport {
             alarmType = prefs.getString(KEY_ALARM, "Einsatz") ?: "Einsatz",
             address = prefs.getString(KEY_ADDRESS, "") ?: "",
             phase = prefs.getString(KEY_PHASE, "Einsatz läuft") ?: "Einsatz läuft",
+            isExercise = prefs.getBoolean(KEY_IS_EXERCISE, false),
             lat = prefs.getString(KEY_LAT, null)?.toDoubleOrNull(),
             lng = prefs.getString(KEY_LNG, null)?.toDoubleOrNull(),
             gmapsUrl = prefs.getString(KEY_GMAPS_URL, null),
@@ -299,7 +304,8 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
         options: Bundle,
         state: EcpWidgetSupport.IncidentWidgetState,
     ) {
-            views.setTextViewText(R.id.einsatz_label, "LAUFENDER EINSATZ · ${state.phase.uppercase()}")
+            val kind = if (state.isExercise) "LAUFENDE ÜBUNG" else "LAUFENDER EINSATZ"
+            views.setTextViewText(R.id.einsatz_label, "$kind · ${state.phase.uppercase()}")
             views.setTextViewText(R.id.einsatz_title, state.alarmType)
             views.setTextViewText(R.id.einsatz_detail, state.address.ifBlank { "Einsatzdetails öffnen" })
             views.setTextViewText(R.id.einsatz_meldung, state.meldung ?: "")
