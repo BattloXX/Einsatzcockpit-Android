@@ -28,6 +28,10 @@
     <!-- Netzwerkstatus für ConnectivityManager-Callback (sofortiger Reconnect bei Netzwechsel) -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Standort wird für einsatzbezogene Karten- und Positionsfunktionen benötigt. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
     <!-- WakeLock: CPU wach halten damit WebSocket-Pings auch im Hintergrund feuern -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 

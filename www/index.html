@@ -157,6 +157,14 @@ function waitForCapacitor(cb, timeout = 3000) {
 
 waitForCapacitor(async () => {
   const { Preferences, SmsGateway } = window.Capacitor.Plugins;
+  // Standort ist eine Laufzeitberechtigung. Die Auto-Update-Variante öffnet
+  // zusätzlich einmal die Android-Systemseite für "Unbekannte Apps installieren".
+  // Beide Entscheidungen liegen beim Geräteinhaber und können nicht still gesetzt werden.
+  try {
+    await window.Capacitor.Plugins.DeviceKeepalive?.requestStartupPermissions?.();
+  } catch (_) {
+    // Berechtigungen blockieren die Anmeldung nicht; Android zeigt sie beim nächsten Start erneut an.
+  }
   await Preferences.set({ key: 'el_base_url', value: 'https://einsatzcockpit.com' });
 
   try {

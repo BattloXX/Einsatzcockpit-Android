@@ -3,11 +3,17 @@ package cloud.einsatzleiter.smsgatewayplugin
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import com.getcapacitor.JSObject
+import com.getcapacitor.PermissionState
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.getcapacitor.annotation.Permission
+import com.getcapacitor.annotation.PermissionCallback
 import com.google.firebase.messaging.FirebaseMessaging
 import cloud.einsatzleiter.smsgatewayplugin.kontakte.KontaktOfflineSyncWorker
 import cloud.einsatzleiter.smsgatewayplugin.kontakte.KontaktSyncEngine
@@ -31,8 +37,52 @@ import kotlinx.coroutines.launch
  * Wird bei App-Start reaktiv aufgerufen; der Service beendet sich nach einer
  * Leerlauffrist selbst, sofern weder Einsatz noch Dienst aktiv sind.
  */
-@CapacitorPlugin(name = "DeviceKeepalive")
+@CapacitorPlugin(
+    name = "DeviceKeepalive",
+    permissions = [
+        Permission(
+            alias = "location",
+            strings = [
+                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+            ],
+        ),
+    ],
+)
 class DeviceKeepalivePlugin : Plugin() {
+
+    /** Requests permissions which must be decided by the device owner at startup. */
+    @PluginMethod
+    fun requestStartupPermissions(call: PluginCall) {
+        if (getPermissionState("location") != PermissionState.GRANTED) {
+            requestPermissionForAlias("location", call, "onStartupLocationPermissionResult")
+            return
+        }
+        requestUnknownSourcesPermission()
+        call.resolve()
+    }
+
+    @PermissionCallback
+    private fun onStartupLocationPermissionResult(call: PluginCall) {
+        // Continue even after a denial: the installer setting is independent from GPS.
+        requestUnknownSourcesPermission()
+        call.resolve(JSObject().apply {
+            put("locationGranted", getPermissionState("location") == PermissionState.GRANTED)
+        })
+    }
+
+    private fun requestUnknownSourcesPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O
+            || !context.resources.getBoolean(R.bool.auto_update_enabled)
+            || context.packageManager.canRequestPackageInstalls()
+        ) return
+        activity?.startActivity(
+            Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:${context.packageName}"),
+            ),
+        )
+    }
 
     /**
      * Returns Android's actual, validated network state.
