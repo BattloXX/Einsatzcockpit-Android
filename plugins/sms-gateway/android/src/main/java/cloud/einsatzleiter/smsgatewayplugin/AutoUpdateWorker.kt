@@ -84,6 +84,14 @@ class AutoUpdateWorker(
             AutoUpdateStatusStore.log(applicationContext, "Auto-Update benötigt mindestens Android 12")
             return Result.success()
         }
+        if (!applicationContext.packageManager.canRequestPackageInstalls()) {
+            AutoUpdateStatusStore.install(
+                applicationContext,
+                "Installation wartet auf Freigabe für unbekannte Apps",
+                "Android-Einstellung \"Unbekannte Apps installieren\" für Einsatzcockpit aktivieren",
+            )
+            return Result.success()
+        }
 
         AutoUpdateStatusStore.checked(applicationContext, "Update-Prüfung im Hintergrund gestartet")
         val channel = preferences(applicationContext)
