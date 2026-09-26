@@ -185,18 +185,26 @@ class EinsatzLivePoller(
         val now = System.currentTimeMillis()
         val hasIncident = !root.isNull("incident")
         val hasGslQueue = !root.isNull("my_lage_queue")
+        val hasGslLive = !root.isNull("lage")
         val state = if (hasIncident) try { EinsatzLiveState.fromJson(root) } catch (_: Exception) { null } else null
         if (hasIncident && state == null) {
             handleNetworkFailure(baseUrl)
             return
         }
         val gslQueue = if (hasGslQueue) try { GslQueueState.fromJson(root) } catch (_: Exception) { null } else null
+        val gslLive = if (hasGslLive) try { GslLiveState.fromJson(root) } catch (_: Exception) { null } else null
+        if (state == null) clearIncident(clearGslState = false)
         if (gslQueue != null) {
             EcpWidgetSupport.saveGslQueue(context, gslQueue)
         } else {
             EcpWidgetSupport.clearGslQueue(context)
         }
-        if (state == null && gslQueue == null) {
+        if (gslLive != null) {
+            EcpWidgetSupport.saveGslLive(context, gslLive)
+        } else {
+            EcpWidgetSupport.clearGslLive(context)
+        }
+        if (state == null && gslQueue == null && gslLive == null) {
             clearIncident()
             if (root.optBoolean("duty_active", false)) {
                 idleSinceMs = null
@@ -249,7 +257,7 @@ class EinsatzLivePoller(
         schedule(ERROR_BACKOFF_MS[(failures - 1).coerceIn(ERROR_BACKOFF_MS.indices)])
     }
 
-    private fun clearIncident() {
+    private fun clearIncident(clearGslState: Boolean = true) {
         currentState = null
         notifier.cancel()
         prefs.edit()
@@ -258,7 +266,10 @@ class EinsatzLivePoller(
             .remove(PREF_DISMISSED_INCIDENT_ID)
             .apply()
         EcpWidgetSupport.clearIncident(context)
-        EcpWidgetSupport.clearGslQueue(context)
+        if (clearGslState) {
+            EcpWidgetSupport.clearGslQueue(context)
+            EcpWidgetSupport.clearGslLive(context)
+        }
     }
 
     private fun schedule(delayMs: Long) {
