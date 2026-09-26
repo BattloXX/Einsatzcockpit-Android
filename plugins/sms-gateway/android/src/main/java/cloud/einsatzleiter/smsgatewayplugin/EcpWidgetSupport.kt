@@ -29,7 +29,16 @@ object EcpWidgetSupport {
     private const val KEY_GSL_LAGE_ID = "gsl_lage_id"
     private const val KEY_GSL_LAGE_NAME = "gsl_lage_name"
     private const val KEY_GSL_LAGE_URL = "gsl_lage_url"
+    private const val KEY_GSL_IS_EXERCISE = "gsl_is_exercise"
     private const val KEY_GSL_REMAINING = "gsl_remaining_count"
+    private const val KEY_LAGE_ID = "lage_id"
+    private const val KEY_LAGE_URL = "lage_url"
+    private const val KEY_LAGE_NAME = "lage_name"
+    private const val KEY_LAGE_IS_EXERCISE = "lage_is_exercise"
+    private const val KEY_LAGE_NEU = "lage_neu"
+    private const val KEY_LAGE_IN_ARBEIT = "lage_in_arbeit"
+    private const val KEY_LAGE_ERLEDIGT = "lage_erledigt"
+    private const val KEY_LAGE_GESAMT = "lage_gesamt"
 
     private fun gslSiteKey(slot: String, field: String) = "gsl_${slot}_$field"
 
@@ -53,9 +62,18 @@ object EcpWidgetSupport {
         val lageId: Long,
         val lageName: String,
         val lageUrl: String,
+        val isExercise: Boolean,
         val current: GslSiteInfo,
         val upcoming: List<GslSiteInfo>,
         val remainingCount: Int,
+    )
+
+    data class GslLiveWidgetState(
+        val id: Long,
+        val url: String,
+        val name: String,
+        val isExercise: Boolean,
+        val counts: GslLiveCounts,
     )
 
     fun saveIncident(context: Context, state: EinsatzLiveState) {
@@ -114,6 +132,7 @@ object EcpWidgetSupport {
             .putLong(KEY_GSL_LAGE_ID, state.lageId)
             .putString(KEY_GSL_LAGE_NAME, state.lageName)
             .putString(KEY_GSL_LAGE_URL, state.lageUrl)
+            .putBoolean(KEY_GSL_IS_EXERCISE, state.isExercise)
             .putInt(KEY_GSL_REMAINING, state.remainingCount)
         putGslSite(editor, "current", state.current)
         listOf("upcoming_0", "upcoming_1").forEachIndexed { index, slot ->
@@ -126,6 +145,7 @@ object EcpWidgetSupport {
     fun clearGslQueue(context: Context) {
         val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(KEY_GSL_LAGE_ID).remove(KEY_GSL_LAGE_NAME).remove(KEY_GSL_LAGE_URL)
+            .remove(KEY_GSL_IS_EXERCISE)
             .remove(KEY_GSL_REMAINING)
         removeGslSite(editor, "current")
         removeGslSite(editor, "upcoming_0")
@@ -143,9 +163,52 @@ object EcpWidgetSupport {
             lageId = lageId,
             lageName = prefs.getString(KEY_GSL_LAGE_NAME, "Grossschadenslage") ?: "Grossschadenslage",
             lageUrl = prefs.getString(KEY_GSL_LAGE_URL, "/lage/$lageId") ?: "/lage/$lageId",
+            isExercise = prefs.getBoolean(KEY_GSL_IS_EXERCISE, false),
             current = current,
             upcoming = listOfNotNull(gslSite(prefs, "upcoming_0"), gslSite(prefs, "upcoming_1")),
             remainingCount = prefs.getInt(KEY_GSL_REMAINING, 0).coerceAtLeast(0),
+        )
+    }
+
+    fun saveGslLive(context: Context, state: GslLiveState) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putLong(KEY_LAGE_ID, state.id)
+            .putString(KEY_LAGE_URL, state.url)
+            .putString(KEY_LAGE_NAME, state.name)
+            .putBoolean(KEY_LAGE_IS_EXERCISE, state.isExercise)
+            .putInt(KEY_LAGE_NEU, state.counts.neu)
+            .putInt(KEY_LAGE_IN_ARBEIT, state.counts.inArbeit)
+            .putInt(KEY_LAGE_ERLEDIGT, state.counts.erledigt)
+            .putInt(KEY_LAGE_GESAMT, state.counts.gesamt)
+            .apply()
+        updateAll(context)
+    }
+
+    fun clearGslLive(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove(KEY_LAGE_ID).remove(KEY_LAGE_URL).remove(KEY_LAGE_NAME)
+            .remove(KEY_LAGE_IS_EXERCISE).remove(KEY_LAGE_NEU).remove(KEY_LAGE_IN_ARBEIT)
+            .remove(KEY_LAGE_ERLEDIGT).remove(KEY_LAGE_GESAMT)
+            .apply()
+        updateAll(context)
+    }
+
+    fun gslLive(context: Context): GslLiveWidgetState? {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val id = prefs.getLong(KEY_LAGE_ID, -1L)
+        val url = prefs.getString(KEY_LAGE_URL, null)
+        if (id < 0L || url.isNullOrBlank()) return null
+        return GslLiveWidgetState(
+            id = id,
+            url = url,
+            name = prefs.getString(KEY_LAGE_NAME, "Grossschadenslage") ?: "Grossschadenslage",
+            isExercise = prefs.getBoolean(KEY_LAGE_IS_EXERCISE, false),
+            counts = GslLiveCounts(
+                neu = prefs.getInt(KEY_LAGE_NEU, 0).coerceAtLeast(0),
+                inArbeit = prefs.getInt(KEY_LAGE_IN_ARBEIT, 0).coerceAtLeast(0),
+                erledigt = prefs.getInt(KEY_LAGE_ERLEDIGT, 0).coerceAtLeast(0),
+                gesamt = prefs.getInt(KEY_LAGE_GESAMT, 0).coerceAtLeast(0),
+            ),
         )
     }
 
@@ -277,8 +340,9 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
         val views = RemoteViews(context.packageName, R.layout.ec_widget_einsatz)
         val state = EcpWidgetSupport.incident(context)
         val gsl = EcpWidgetSupport.gslQueue(context)
+        val lage = EcpWidgetSupport.gslLive(context)
         when {
-            state == null && gsl == null -> {
+            state == null && gsl == null && lage == null -> {
             views.setTextViewText(R.id.einsatz_label, "EINSATZCOCKPIT")
             views.setTextViewText(R.id.einsatz_title, "Kein aktiver Einsatz")
             views.setTextViewText(R.id.einsatz_detail, "Der Einsatzstatus wird automatisch aktualisiert.")
@@ -292,7 +356,8 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
             }
             // A GSL assignment is more urgent and information-dense than a parallel incident.
             gsl != null -> renderGsl(context, views, id, gsl)
-            else -> renderIncident(context, views, id, options, state!!)
+            state != null -> renderIncident(context, views, id, options, state)
+            else -> renderGslLive(context, views, id, lage!!)
         }
         manager.updateAppWidget(id, views)
     }
@@ -348,7 +413,8 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
         id: Int,
         state: EcpWidgetSupport.GslQueueWidgetState,
     ) {
-        views.setTextViewText(R.id.einsatz_label, "GROSSSCHADENSLAGE · ${state.lageName}")
+        val kind = if (state.isExercise) "LAUFENDE ÜBUNG" else "GROSSSCHADENSLAGE"
+        views.setTextViewText(R.id.einsatz_label, "$kind · ${state.lageName}")
         views.setTextViewText(R.id.einsatz_title, state.current.bezeichnung)
         views.setTextViewText(R.id.einsatz_detail, state.current.address.ifBlank { "Einsatzstelle öffnen" })
         views.setViewVisibility(R.id.einsatz_meldung, View.GONE)
@@ -392,6 +458,28 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
         }
         views.setInt(R.id.einsatz_root, "setBackgroundResource", R.drawable.ec_widget_background_alert)
         EcpWidgetSupport.contentIntent(context, state.lageUrl, 8300 + id)
+            ?.let { views.setOnClickPendingIntent(R.id.einsatz_root, it) }
+    }
+
+    private fun renderGslLive(
+        context: Context,
+        views: RemoteViews,
+        id: Int,
+        state: EcpWidgetSupport.GslLiveWidgetState,
+    ) {
+        val kind = if (state.isExercise) "LAUFENDE ÜBUNG" else "GROSSSCHADENSLAGE"
+        views.setTextViewText(R.id.einsatz_label, "$kind · ${state.name}")
+        views.setTextViewText(R.id.einsatz_title, state.name)
+        views.setTextViewText(
+            R.id.einsatz_detail,
+            "${state.counts.neu} neu · ${state.counts.inArbeit} in Arbeit · ${state.counts.erledigt} erledigt",
+        )
+        views.setViewVisibility(R.id.einsatz_map, View.GONE)
+        views.setViewVisibility(R.id.einsatz_meldung, View.GONE)
+        views.setViewVisibility(R.id.einsatz_actions, View.GONE)
+        views.setViewVisibility(R.id.gsl_queue_container, View.GONE)
+        views.setInt(R.id.einsatz_root, "setBackgroundResource", R.drawable.ec_widget_background_alert)
+        EcpWidgetSupport.contentIntent(context, state.url, 8300 + id)
             ?.let { views.setOnClickPendingIntent(R.id.einsatz_root, it) }
     }
 }
