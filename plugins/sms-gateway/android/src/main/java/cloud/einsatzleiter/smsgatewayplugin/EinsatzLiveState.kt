@@ -37,8 +37,8 @@ data class EinsatzLiveState(
             return EinsatzLiveState(
                 id = incident.getLong("id"),
                 url = incident.getString("url"),
-                alarmTypeCode = incident.optString("alarm_type_code", "Einsatz"),
-                address = incident.optString("address"),
+                alarmTypeCode = incident.optStringOrNull("alarm_type_code") ?: "Einsatz",
+                address = incident.optStringOrNull("address") ?: "",
                 startedAt = startedAt,
                 phaseIndex = incident.optInt("phase_index", 0),
                 phaseCount = incident.optInt("phase_count", 4).coerceAtLeast(1),
@@ -48,11 +48,11 @@ data class EinsatzLiveState(
                 chronometerBase = SystemClock.elapsedRealtime() - elapsed,
                 lat = incident.optDouble("lat", Double.NaN).takeIf { !it.isNaN() },
                 lng = incident.optDouble("lng", Double.NaN).takeIf { !it.isNaN() },
-                gmapsUrl = incident.optString("gmaps_url").takeIf { it.isNotBlank() },
-                meldung = incident.optString("meldung").takeIf { it.isNotBlank() },
+                gmapsUrl = incident.optStringOrNull("gmaps_url"),
+                meldung = incident.optStringOrNull("meldung"),
                 objektId = objekt?.optLong("id", -1L)?.takeIf { it >= 0L },
-                objektName = objekt?.optString("name")?.takeIf { it.isNotBlank() },
-                objektUrl = objekt?.optString("url")?.takeIf { it.isNotBlank() },
+                objektName = objekt?.optStringOrNull("name"),
+                objektUrl = objekt?.optStringOrNull("url"),
             )
         }
 

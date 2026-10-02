@@ -272,18 +272,12 @@ object EcpWidgetSupport {
 
     fun updateAll(context: Context) {
         val manager = AppWidgetManager.getInstance(context)
-        listOf(
-            EcpKontakteWidgetProvider::class.java,
-            EcpObjekteWidgetProvider::class.java,
-            EcpEinsatzWidgetProvider::class.java,
-        ).forEach { provider ->
-            val ids = manager.getAppWidgetIds(ComponentName(context, provider))
-            if (ids.isNotEmpty()) manager.notifyAppWidgetViewDataChanged(ids, android.R.id.content)
-            ids.forEach { id ->
-                val receiver = provider.getDeclaredConstructor().newInstance()
-                receiver.onUpdate(context, manager, intArrayOf(id))
-            }
-        }
+        val contactIds = manager.getAppWidgetIds(ComponentName(context, EcpKontakteWidgetProvider::class.java))
+        if (contactIds.isNotEmpty()) EcpKontakteWidgetProvider().onUpdate(context, manager, contactIds)
+        val objectIds = manager.getAppWidgetIds(ComponentName(context, EcpObjekteWidgetProvider::class.java))
+        if (objectIds.isNotEmpty()) EcpObjekteWidgetProvider().onUpdate(context, manager, objectIds)
+        val incidentIds = manager.getAppWidgetIds(ComponentName(context, EcpEinsatzWidgetProvider::class.java))
+        if (incidentIds.isNotEmpty()) incidentIds.forEach { EcpEinsatzWidgetProvider.render(context, manager, it) }
     }
 }
 
@@ -321,54 +315,60 @@ class EcpObjekteWidgetProvider : EcpShortcutWidgetProvider() {
 
 class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        ids.forEach { id -> update(context, manager, id) }
+        if (ids.isNotEmpty()) EinsatzWidgetRefreshWorker.schedule(context)
+        ids.forEach { id -> render(context, manager, id) }
     }
+
+    override fun onEnabled(context: Context) = EinsatzWidgetRefreshWorker.schedule(context)
+
+    override fun onDisabled(context: Context) = EinsatzWidgetRefreshWorker.cancel(context)
 
     override fun onAppWidgetOptionsChanged(
         context: Context,
         manager: AppWidgetManager,
         appWidgetId: Int,
         newOptions: Bundle,
-    ) = update(context, manager, appWidgetId, newOptions)
+    ) = render(context, manager, appWidgetId, newOptions)
 
-    private fun update(
-        context: Context,
-        manager: AppWidgetManager,
-        id: Int,
-        options: Bundle = manager.getAppWidgetOptions(id),
-    ) {
-        val views = RemoteViews(context.packageName, R.layout.ec_widget_einsatz)
-        val state = EcpWidgetSupport.incident(context)
-        val gsl = EcpWidgetSupport.gslQueue(context)
-        val lage = EcpWidgetSupport.gslLive(context)
-        when {
-            state == null && gsl == null && lage == null -> {
-            views.setTextViewText(R.id.einsatz_label, "EINSATZCOCKPIT")
-            views.setTextViewText(R.id.einsatz_title, "Kein aktiver Einsatz")
-            views.setTextViewText(R.id.einsatz_detail, "Der Einsatzstatus wird automatisch aktualisiert.")
-            views.setViewVisibility(R.id.einsatz_map, View.GONE)
-            views.setViewVisibility(R.id.einsatz_meldung, View.GONE)
-            views.setViewVisibility(R.id.einsatz_actions, View.GONE)
-            views.setViewVisibility(R.id.gsl_queue_container, View.GONE)
-            views.setInt(R.id.einsatz_root, "setBackgroundResource", R.drawable.ec_widget_background)
-            EcpWidgetSupport.contentIntent(context, "/", 8300 + id)
-                ?.let { views.setOnClickPendingIntent(R.id.einsatz_root, it) }
+    companion object {
+        fun render(
+            context: Context,
+            manager: AppWidgetManager,
+            id: Int,
+            options: Bundle = manager.getAppWidgetOptions(id),
+        ) {
+            val views = RemoteViews(context.packageName, R.layout.ec_widget_einsatz)
+            val state = EcpWidgetSupport.incident(context)
+            val gsl = EcpWidgetSupport.gslQueue(context)
+            val lage = EcpWidgetSupport.gslLive(context)
+            when {
+                state == null && gsl == null && lage == null -> {
+                    views.setTextViewText(R.id.einsatz_label, "EINSATZCOCKPIT")
+                    views.setTextViewText(R.id.einsatz_title, "Kein aktiver Einsatz")
+                    views.setTextViewText(R.id.einsatz_detail, "Der Einsatzstatus wird automatisch aktualisiert.")
+                    views.setViewVisibility(R.id.einsatz_map, View.GONE)
+                    views.setViewVisibility(R.id.einsatz_meldung, View.GONE)
+                    views.setViewVisibility(R.id.einsatz_actions, View.GONE)
+                    views.setViewVisibility(R.id.gsl_queue_container, View.GONE)
+                    views.setInt(R.id.einsatz_root, "setBackgroundResource", R.drawable.ec_widget_background)
+                    EcpWidgetSupport.contentIntent(context, "/", 8300 + id)
+                        ?.let { views.setOnClickPendingIntent(R.id.einsatz_root, it) }
+                }
+                // A GSL assignment is more urgent and information-dense than a parallel incident.
+                gsl != null -> renderGsl(context, views, id, gsl)
+                state != null -> renderIncident(context, views, id, options, state)
+                else -> renderGslLive(context, views, id, lage!!)
             }
-            // A GSL assignment is more urgent and information-dense than a parallel incident.
-            gsl != null -> renderGsl(context, views, id, gsl)
-            state != null -> renderIncident(context, views, id, options, state)
-            else -> renderGslLive(context, views, id, lage!!)
+            manager.updateAppWidget(id, views)
         }
-        manager.updateAppWidget(id, views)
-    }
 
-    private fun renderIncident(
-        context: Context,
-        views: RemoteViews,
-        id: Int,
-        options: Bundle,
-        state: EcpWidgetSupport.IncidentWidgetState,
-    ) {
+        private fun renderIncident(
+            context: Context,
+            views: RemoteViews,
+            id: Int,
+            options: Bundle,
+            state: EcpWidgetSupport.IncidentWidgetState,
+        ) {
             val kind = if (state.isExercise) "LAUFENDE ÜBUNG" else "LAUFENDER EINSATZ"
             views.setTextViewText(R.id.einsatz_label, "$kind · ${state.phase.uppercase()}")
             views.setTextViewText(R.id.einsatz_title, state.alarmType)
@@ -405,14 +405,14 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
             views.setInt(R.id.einsatz_root, "setBackgroundResource", R.drawable.ec_widget_background_alert)
             EcpWidgetSupport.contentIntent(context, state.url, 8300 + id)
                 ?.let { views.setOnClickPendingIntent(R.id.einsatz_root, it) }
-    }
+        }
 
-    private fun renderGsl(
-        context: Context,
-        views: RemoteViews,
-        id: Int,
-        state: EcpWidgetSupport.GslQueueWidgetState,
-    ) {
+        private fun renderGsl(
+            context: Context,
+            views: RemoteViews,
+            id: Int,
+            state: EcpWidgetSupport.GslQueueWidgetState,
+        ) {
         val kind = if (state.isExercise) "LAUFENDE ÜBUNG" else "GROSSSCHADENSLAGE"
         views.setTextViewText(R.id.einsatz_label, "$kind · ${state.lageName}")
         views.setTextViewText(R.id.einsatz_title, state.current.bezeichnung)
@@ -459,14 +459,14 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
         views.setInt(R.id.einsatz_root, "setBackgroundResource", R.drawable.ec_widget_background_alert)
         EcpWidgetSupport.contentIntent(context, state.lageUrl, 8300 + id)
             ?.let { views.setOnClickPendingIntent(R.id.einsatz_root, it) }
-    }
+        }
 
-    private fun renderGslLive(
-        context: Context,
-        views: RemoteViews,
-        id: Int,
-        state: EcpWidgetSupport.GslLiveWidgetState,
-    ) {
+        private fun renderGslLive(
+            context: Context,
+            views: RemoteViews,
+            id: Int,
+            state: EcpWidgetSupport.GslLiveWidgetState,
+        ) {
         val kind = if (state.isExercise) "LAUFENDE ÜBUNG" else "GROSSSCHADENSLAGE"
         views.setTextViewText(R.id.einsatz_label, "$kind · ${state.name}")
         views.setTextViewText(R.id.einsatz_title, state.name)
@@ -481,5 +481,7 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
         views.setInt(R.id.einsatz_root, "setBackgroundResource", R.drawable.ec_widget_background_alert)
         EcpWidgetSupport.contentIntent(context, state.url, 8300 + id)
             ?.let { views.setOnClickPendingIntent(R.id.einsatz_root, it) }
+        }
+
     }
 }

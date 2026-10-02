@@ -20,13 +20,13 @@ data class GslLiveState(
         fun fromJson(root: JSONObject): GslLiveState? {
             val lage = root.optJSONObject("lage") ?: return null
             val id = lage.optLong("id", -1L)
-            val url = lage.optString("url").takeIf { it.isNotBlank() }
+            val url = lage.optStringOrNull("url")
             if (id < 0L || url == null) return null
             val counts = lage.optJSONObject("counts")
             return GslLiveState(
                 id = id,
                 url = url,
-                name = lage.optString("name").takeIf { it.isNotBlank() } ?: "Grossschadenslage",
+                name = lage.optStringOrNull("name") ?: "Grossschadenslage",
                 isExercise = lage.optBoolean("is_exercise", false),
                 counts = GslLiveCounts(
                     neu = counts?.optInt("neu", 0)?.coerceAtLeast(0) ?: 0,
