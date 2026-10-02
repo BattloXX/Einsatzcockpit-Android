@@ -19,14 +19,14 @@ data class GslSiteInfo(
             if (id < 0L) return null
             return GslSiteInfo(
                 id = id,
-                bezeichnung = json.optString("bezeichnung").takeIf { it.isNotBlank() } ?: return null,
-                meldung = json.optString("meldung").takeIf { it.isNotBlank() },
-                address = json.optString("address"),
+                bezeichnung = json.optStringOrNull("bezeichnung") ?: return null,
+                meldung = json.optStringOrNull("meldung"),
+                address = json.optStringOrNull("address") ?: "",
                 lat = json.optDouble("lat", Double.NaN).takeIf { !it.isNaN() },
                 lng = json.optDouble("lng", Double.NaN).takeIf { !it.isNaN() },
-                gmapsUrl = json.optString("gmaps_url").takeIf { it.isNotBlank() },
-                priority = json.optString("priority").takeIf { it.isNotBlank() },
-                phase = json.optString("phase"),
+                gmapsUrl = json.optStringOrNull("gmaps_url"),
+                priority = json.optStringOrNull("priority"),
+                phase = json.optStringOrNull("phase") ?: "",
             )
         }
     }
@@ -45,7 +45,7 @@ data class GslQueueState(
         fun fromJson(root: JSONObject): GslQueueState? {
             val queue = root.optJSONObject("my_lage_queue") ?: return null
             val lageId = queue.optLong("lage_id", -1L)
-            val lageUrl = queue.optString("lage_url").takeIf { it.isNotBlank() }
+            val lageUrl = queue.optStringOrNull("lage_url")
             val current = queue.optJSONObject("current")?.let(GslSiteInfo::fromJson)
             if (lageId < 0L || lageUrl == null || current == null) return null
             val upcoming = buildList {
@@ -56,7 +56,7 @@ data class GslQueueState(
             }
             return GslQueueState(
                 lageId = lageId,
-                lageName = queue.optString("lage_name").takeIf { it.isNotBlank() } ?: "Grossschadenslage",
+                lageName = queue.optStringOrNull("lage_name") ?: "Grossschadenslage",
                 lageUrl = lageUrl,
                 isExercise = queue.optBoolean("is_exercise", false),
                 current = current,

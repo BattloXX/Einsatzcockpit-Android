@@ -5,7 +5,6 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Handler
 import android.os.Looper
-import org.json.JSONObject
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -177,22 +176,19 @@ class EinsatzLivePoller(
     }
 
     private fun handleSuccess(baseUrl: String, body: String) {
-        val root = try { JSONObject(body) } catch (_: Exception) {
+        val response = DutyStateResponse.parse(body) ?: run {
             handleNetworkFailure(baseUrl)
             return
         }
         failures = 0
         val now = System.currentTimeMillis()
-        val hasIncident = !root.isNull("incident")
-        val hasGslQueue = !root.isNull("my_lage_queue")
-        val hasGslLive = !root.isNull("lage")
-        val state = if (hasIncident) try { EinsatzLiveState.fromJson(root) } catch (_: Exception) { null } else null
-        if (hasIncident && state == null) {
+        val state = response.incident
+        if (response.hasIncident && state == null) {
             handleNetworkFailure(baseUrl)
             return
         }
-        val gslQueue = if (hasGslQueue) try { GslQueueState.fromJson(root) } catch (_: Exception) { null } else null
-        val gslLive = if (hasGslLive) try { GslLiveState.fromJson(root) } catch (_: Exception) { null } else null
+        val gslQueue = response.gslQueue
+        val gslLive = response.gslLive
         if (state == null) clearIncident(clearGslState = false)
         if (gslQueue != null) {
             EcpWidgetSupport.saveGslQueue(context, gslQueue)
@@ -206,7 +202,7 @@ class EinsatzLivePoller(
         }
         if (state == null && gslQueue == null && gslLive == null) {
             clearIncident()
-            if (root.optBoolean("duty_active", false)) {
+            if (response.dutyActive) {
                 idleSinceMs = null
                 onNeeded()
             } else {
