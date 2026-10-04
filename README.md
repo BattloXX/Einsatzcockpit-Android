@@ -14,7 +14,7 @@ Die App ist ein schlanker **Capacitor-Wrapper** um die bestehende Progressive We
 | **GPS-Standort im Einsatz** (Hintergrund, nur bei aktivem Einsatz) | Background Geolocation → Lagekarte |
 | **Bildschirm aktiv halten** (Atemschutz-Überwachung, Screensaver) | Native Wake Lock |
 | **SMS-Gateway-Modus** (Versand/Empfang über SIM-Karte des Geräts, 24/7-Dauerbetrieb) | Eigenes Capacitor-Plugin, persistente WebSocket-Verbindung zum Backend |
-| **Home-Screen-Widgets** (Kontakte, Objekte, Einsatzstatus, Fahrt erfassen — Direktzugriff ohne App zu öffnen) | `AppWidgetProvider` + `RemoteViews`, Deep-Link in die bestehende WebView-Session |
+| **Home-Screen-Widgets** (Kontakte, Objekte, Einsatzstatus, Fahrt erfassen — Direktzugriff ohne App zu öffnen) | `AppWidgetProvider` + `RemoteViews`, Deep-Link in die bestehende WebView-Session; das Einsatz-Widget zeigt bei Koordinaten eine zwischengespeicherte OSM-Karte |
 | **Sideload-APK** (kein Play Store nötig) | Signierte APK via GitHub Actions, CalVer-Versionierung |
 
 > Die Web-App, das Dashboard und alle Browser-Nutzer funktionieren weiterhin unverändert. Diese App ist ein optionaler nativer Client für den Einsatzbetrieb.

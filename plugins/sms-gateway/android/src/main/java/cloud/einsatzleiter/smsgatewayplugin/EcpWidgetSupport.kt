@@ -5,6 +5,7 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -93,6 +94,7 @@ object EcpWidgetSupport {
             .putString(KEY_OBJEKT_URL, state.objektUrl)
             .apply()
         updateAll(context)
+        EinsatzWidgetMapWorker.schedule(context)
     }
 
     fun clearIncident(context: Context) {
@@ -102,6 +104,7 @@ object EcpWidgetSupport {
             .remove(KEY_LAT).remove(KEY_LNG).remove(KEY_GMAPS_URL).remove(KEY_MELDUNG)
             .remove(KEY_OBJEKT_ID).remove(KEY_OBJEKT_NAME).remove(KEY_OBJEKT_URL)
             .apply()
+        EinsatzWidgetMapWorker.clearCache(context)
         updateAll(context)
     }
 
@@ -347,6 +350,7 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
                     views.setTextViewText(R.id.einsatz_title, "Kein aktiver Einsatz")
                     views.setTextViewText(R.id.einsatz_detail, "Der Einsatzstatus wird automatisch aktualisiert.")
                     views.setViewVisibility(R.id.einsatz_map, View.GONE)
+                    views.setViewVisibility(R.id.einsatz_maps_button, View.GONE)
                     views.setViewVisibility(R.id.einsatz_meldung, View.GONE)
                     views.setViewVisibility(R.id.einsatz_actions, View.GONE)
                     views.setViewVisibility(R.id.gsl_queue_container, View.GONE)
@@ -379,29 +383,31 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
                 if (state.meldung != null && EcpWidgetSupport.isExpanded(options)) View.VISIBLE else View.GONE,
             )
             views.setViewVisibility(R.id.gsl_queue_container, View.GONE)
-            views.setViewVisibility(R.id.einsatz_actions, View.VISIBLE)
-            views.setViewVisibility(R.id.einsatz_maps_action, if (state.gmapsUrl != null) View.VISIBLE else View.GONE)
-            views.setViewVisibility(R.id.einsatz_object_action, View.VISIBLE)
-            views.setViewVisibility(R.id.einsatz_fahrt_action, View.VISIBLE)
+            val hasObjectAction = state.objektId != null && !state.objektUrl.isNullOrBlank()
+            views.setViewVisibility(R.id.einsatz_actions, if (hasObjectAction) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.einsatz_object_action, if (hasObjectAction) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.einsatz_fahrt_action, View.GONE)
             if (state.objektId != null && !state.objektUrl.isNullOrBlank()) {
                 views.setTextViewText(R.id.einsatz_object_action, "Objekt: ${state.objektName ?: "öffnen"}")
                 EcpWidgetSupport.contentIntent(context, state.objektUrl, 8320 + id)
                     ?.let { views.setOnClickPendingIntent(R.id.einsatz_object_action, it) }
-            } else {
-                views.setTextViewText(R.id.einsatz_object_action, "Alle Objekte")
-                EcpWidgetSupport.contentIntent(context, "/objekte/", 8330 + id)
-                    ?.let { views.setOnClickPendingIntent(R.id.einsatz_object_action, it) }
             }
             state.gmapsUrl?.let { url ->
                 EcpWidgetSupport.mapsIntent(context, url, 8310 + id)
-                    ?.let { views.setOnClickPendingIntent(R.id.einsatz_maps_action, it) }
+                    ?.let {
+                        views.setOnClickPendingIntent(R.id.einsatz_map, it)
+                        views.setOnClickPendingIntent(R.id.einsatz_maps_button, it)
+                    }
             }
-            EcpWidgetSupport.contentIntent(context, "/fahrtenbuch/neu", 8340 + id)
-                ?.let { views.setOnClickPendingIntent(R.id.einsatz_fahrt_action, it) }
+            views.setViewVisibility(R.id.einsatz_maps_button, if (state.gmapsUrl != null) View.VISIBLE else View.GONE)
+            val mapBitmap = EinsatzWidgetMapWorker.cachedFile(context, state.lat, state.lng)
+                ?.takeIf { it.isFile && it.length() > 0L }
+                ?.let { BitmapFactory.decodeFile(it.absolutePath) }
             views.setViewVisibility(
                 R.id.einsatz_map,
-                if (state.gmapsUrl == null && EcpWidgetSupport.isExpanded(options)) View.VISIBLE else View.GONE,
+                if (mapBitmap != null) View.VISIBLE else View.GONE,
             )
+            mapBitmap?.let { views.setImageViewBitmap(R.id.einsatz_map, it) }
             views.setInt(R.id.einsatz_root, "setBackgroundResource", R.drawable.ec_widget_background_alert)
             EcpWidgetSupport.contentIntent(context, state.url, 8300 + id)
                 ?.let { views.setOnClickPendingIntent(R.id.einsatz_root, it) }
@@ -419,8 +425,8 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
         views.setTextViewText(R.id.einsatz_detail, state.current.address.ifBlank { "Einsatzstelle öffnen" })
         views.setViewVisibility(R.id.einsatz_meldung, View.GONE)
         views.setViewVisibility(R.id.einsatz_map, View.GONE)
+        views.setViewVisibility(R.id.einsatz_maps_button, View.GONE)
         views.setViewVisibility(R.id.einsatz_actions, View.VISIBLE)
-        views.setViewVisibility(R.id.einsatz_maps_action, View.GONE)
         views.setViewVisibility(R.id.einsatz_object_action, View.GONE)
         views.setViewVisibility(R.id.einsatz_fahrt_action, View.VISIBLE)
         EcpWidgetSupport.contentIntent(context, "/fahrtenbuch/neu", 8340 + id)
@@ -475,6 +481,7 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
             "${state.counts.neu} neu · ${state.counts.inArbeit} in Arbeit · ${state.counts.erledigt} erledigt",
         )
         views.setViewVisibility(R.id.einsatz_map, View.GONE)
+        views.setViewVisibility(R.id.einsatz_maps_button, View.GONE)
         views.setViewVisibility(R.id.einsatz_meldung, View.GONE)
         views.setViewVisibility(R.id.einsatz_actions, View.GONE)
         views.setViewVisibility(R.id.gsl_queue_container, View.GONE)
