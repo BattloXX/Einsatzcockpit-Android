@@ -97,6 +97,27 @@ object EcpWidgetSupport {
         EinsatzWidgetMapWorker.schedule(context)
     }
 
+    fun saveProvisionalIncident(
+        context: Context,
+        id: Long,
+        url: String,
+        alarmType: String,
+        address: String,
+        isExercise: Boolean,
+    ) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putLong(KEY_ID, id)
+            .putString(KEY_URL, url)
+            .putString(KEY_ALARM, alarmType)
+            .putString(KEY_ADDRESS, address)
+            .putString(KEY_PHASE, "Alarmiert")
+            .putBoolean(KEY_IS_EXERCISE, isExercise)
+            .remove(KEY_LAT).remove(KEY_LNG).remove(KEY_GMAPS_URL).remove(KEY_MELDUNG)
+            .remove(KEY_OBJEKT_ID).remove(KEY_OBJEKT_NAME).remove(KEY_OBJEKT_URL)
+            .apply()
+        updateAll(context)
+    }
+
     fun clearIncident(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(KEY_ID).remove(KEY_URL).remove(KEY_ALARM).remove(KEY_ADDRESS).remove(KEY_PHASE)
@@ -340,6 +361,25 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
             id: Int,
             options: Bundle = manager.getAppWidgetOptions(id),
         ) {
+            try {
+                renderState(context, manager, id, options, withMap = true)
+            } catch (e: Exception) {
+                SmsGatewayService.log("Widget-Rendering fehlgeschlagen: ${e.javaClass.simpleName}")
+                try {
+                    renderState(context, manager, id, options, withMap = false)
+                } catch (_: Exception) {
+                    renderFallback(context, manager, id)
+                }
+            }
+        }
+
+        private fun renderState(
+            context: Context,
+            manager: AppWidgetManager,
+            id: Int,
+            options: Bundle,
+            withMap: Boolean,
+        ) {
             val views = RemoteViews(context.packageName, R.layout.ec_widget_einsatz)
             val state = EcpWidgetSupport.incident(context)
             val gsl = EcpWidgetSupport.gslQueue(context)
@@ -360,10 +400,44 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
                 }
                 // A GSL assignment is more urgent and information-dense than a parallel incident.
                 gsl != null -> renderGsl(context, views, id, gsl)
-                state != null -> renderIncident(context, views, id, options, state)
+                state != null -> renderIncident(context, views, id, options, state, withMap)
                 else -> renderGslLive(context, views, id, lage!!)
             }
             manager.updateAppWidget(id, views)
+        }
+
+        private fun renderFallback(context: Context, manager: AppWidgetManager, id: Int) {
+            try {
+                val state = EcpWidgetSupport.incident(context)
+                val views = RemoteViews(context.packageName, R.layout.ec_widget_einsatz)
+                views.setTextViewText(R.id.einsatz_label, "EINSATZCOCKPIT")
+                views.setTextViewText(R.id.einsatz_title, state?.alarmType ?: "Einsatz läuft")
+                views.setTextViewText(R.id.einsatz_detail, "Antippen für Details")
+                views.setViewVisibility(R.id.einsatz_map, View.GONE)
+                views.setViewVisibility(R.id.einsatz_maps_button, View.GONE)
+                views.setViewVisibility(R.id.einsatz_meldung, View.GONE)
+                views.setViewVisibility(R.id.einsatz_actions, View.GONE)
+                views.setViewVisibility(R.id.gsl_queue_container, View.GONE)
+                EcpWidgetSupport.contentIntent(context, state?.url ?: "/", 8300 + id)
+                    ?.let { views.setOnClickPendingIntent(R.id.einsatz_root, it) }
+                manager.updateAppWidget(id, views)
+            } catch (_: Exception) {
+            }
+        }
+
+        private fun loadMapBitmap(
+            context: Context,
+            state: EcpWidgetSupport.IncidentWidgetState,
+        ): android.graphics.Bitmap? {
+            return try {
+                EinsatzWidgetMapWorker.cachedFile(context, state.lat, state.lng)
+                    ?.takeIf { it.isFile && it.length() > 0L }
+                    ?.let { BitmapFactory.decodeFile(it.absolutePath) }
+            } catch (_: OutOfMemoryError) {
+                null
+            } catch (_: Exception) {
+                null
+            }
         }
 
         private fun renderIncident(
@@ -372,6 +446,7 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
             id: Int,
             options: Bundle,
             state: EcpWidgetSupport.IncidentWidgetState,
+            withMap: Boolean = true,
         ) {
             val kind = if (state.isExercise) "LAUFENDE ÜBUNG" else "LAUFENDER EINSATZ"
             views.setTextViewText(R.id.einsatz_label, "$kind · ${state.phase.uppercase()}")
@@ -400,9 +475,7 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
                     }
             }
             views.setViewVisibility(R.id.einsatz_maps_button, if (state.gmapsUrl != null) View.VISIBLE else View.GONE)
-            val mapBitmap = EinsatzWidgetMapWorker.cachedFile(context, state.lat, state.lng)
-                ?.takeIf { it.isFile && it.length() > 0L }
-                ?.let { BitmapFactory.decodeFile(it.absolutePath) }
+            val mapBitmap = if (!withMap) null else loadMapBitmap(context, state)
             views.setViewVisibility(
                 R.id.einsatz_map,
                 if (mapBitmap != null) View.VISIBLE else View.GONE,

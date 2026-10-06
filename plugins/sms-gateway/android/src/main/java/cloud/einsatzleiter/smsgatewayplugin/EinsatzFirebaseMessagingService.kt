@@ -3,6 +3,8 @@ package cloud.einsatzleiter.smsgatewayplugin
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -36,11 +38,13 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
-        data["url"]?.let { rawUrl ->
-            val path = try { android.net.Uri.parse(rawUrl).path } catch (_: Exception) { null }
-            if (path != null && EINSATZ_PRELOAD_URL_REGEX.matches(path)) {
-                EinsatzPreloadWorker.enqueue(this, absoluteUrl(rawUrl))
-            }
+        val rawUrl = data["url"]
+        val incidentPath = rawUrl?.let { url ->
+            try { android.net.Uri.parse(url).path } catch (_: Exception) { null }
+        }
+        val isIncidentPush = incidentPath != null && EINSATZ_PRELOAD_URL_REGEX.matches(incidentPath)
+        if (rawUrl != null && isIncidentPush) {
+            EinsatzPreloadWorker.enqueue(this, absoluteUrl(rawUrl))
         }
         val isAlarm = data["channel_id"] == "einsatz_alarm"
         val isSilentWake = data["silent"] == "1"
@@ -84,6 +88,40 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 data["url"].orEmpty(),
                 GENERIC_NOTIFICATION_ID,
             )
+        }
+
+        if (isIncidentPush && incidentPath != null) {
+            refreshIncidentWidgetFromPush(incidentPath, data)
+        }
+    }
+
+    private fun refreshIncidentWidgetFromPush(path: String, data: Map<String, String>) {
+        try {
+            val ids = AppWidgetManager.getInstance(this).getAppWidgetIds(
+                ComponentName(this, EcpEinsatzWidgetProvider::class.java),
+            )
+            if (ids.isEmpty()) return
+            val id = path.removeSuffix("/info").substringAfterLast('/').toLongOrNull() ?: return
+            if (EcpWidgetSupport.incident(this)?.id != id) {
+                val title = data["title"].orEmpty()
+                val alarmType = title.substringAfter("Einsatz:", "Einsatz").trim().ifBlank { "Einsatz" }
+                EcpWidgetSupport.saveProvisionalIncident(
+                    this,
+                    id,
+                    "/einsatz/$id",
+                    alarmType,
+                    data["body"].orEmpty().ifBlank { "Kein Ort angegeben" },
+                    title.contains("[ÜBUNG]"),
+                )
+                SmsGatewayService.log("Widget: vorläufiger Einsatz $id aus Push")
+            }
+            val outcome = DutyStateFetcher.fetchAndApply(this, "Push")
+            if (outcome != DutyStateFetcher.Outcome.APPLIED) {
+                EinsatzWidgetRefreshWorker.refreshNow(this)
+            }
+            EinsatzWidgetRefreshWorker.refreshDelayed(this, 90)
+        } catch (e: Exception) {
+            SmsGatewayService.log("Widget-Aktualisierung nach Push fehlgeschlagen: ${e.javaClass.simpleName}")
         }
     }
 
