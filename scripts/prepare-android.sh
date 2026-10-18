@@ -9,6 +9,9 @@ npx cap add android
 mkdir -p android/app/src/main/assets
 npx cap sync android
 
+# Eigene Activity verarbeitet App Links auch bei bereits laufender App.
+cp scripts/MainActivity.java android/app/src/main/java/cloud/einsatzleiter/app/MainActivity.java
+
 # Android SDK 36 und AGP
 sed -i "s|com.android.tools.build:gradle:8.7.2|com.android.tools.build:gradle:8.9.1|" android/build.gradle
 sed -i "s|compileSdkVersion = 35|compileSdkVersion = 36|" android/variables.gradle
@@ -84,6 +87,20 @@ camera_feature = '<uses-feature android:name="android.hardware.camera" android:r
 if "android.hardware.camera" not in content:
     content = content.replace("</manifest>", f"    {camera_feature}\n</manifest>")
     added.append("hardware.camera")
+
+# Nur die auf dem Server per assetlinks.json verifizierte Domain registrieren.
+app_link = '''
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="einsatzcockpit.com" />
+            </intent-filter>
+'''
+if 'android:autoVerify="true"' not in content:
+    if content.count("</activity>") != 1:
+        raise SystemExit("MainActivity fuer App Links nicht eindeutig gefunden")
+    content = content.replace("</activity>", app_link + "        </activity>", 1)
 
 with open(path, "w", encoding="utf-8") as f:
     f.write(content)

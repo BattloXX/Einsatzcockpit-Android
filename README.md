@@ -89,12 +89,22 @@ npm install
 ### 2. Android-Plattform einrichten
 
 ```bash
-npx cap add android
-mkdir -p android/app/src/main/assets   # wird von cap sync benötigt
-npx cap sync android
+bash scripts/prepare-android.sh
 ```
 
 > **Hinweis:** Der `android/`-Ordner ist gitignored (Capacitor-generiert). Er wird lokal und im CI bei jedem Build neu angelegt. Eigene Anpassungen am Manifest müssen entweder lokal gemacht oder als Patch im Workflow hinterlegt werden.
+
+Das Vorbereitungsskript registriert außerdem verifizierte Android App Links für
+`https://einsatzcockpit.com` und kopiert `scripts/MainActivity.java` in das generierte
+Projekt. Links öffnen ihr Ziel mit Pfad, Query und Fragment in der App-WebView,
+sowohl beim Kaltstart als auch bei bereits laufender App. Die normale Startadresse
+bleibt `https://einsatzcockpit.com`.
+
+Für das automatische Öffnen muss die Signatur der installierten APK in
+`https://einsatzcockpit.com/.well-known/assetlinks.json` hinterlegt sein. Das gilt
+für die signierten Release-APKs; lokale Debug-APKs haben eine andere Signatur.
+Falls Android bereits eine andere Auswahl gespeichert hat: **Einstellungen →
+Apps → Einsatzcockpit → Standardmäßig öffnen → Unterstützte Links öffnen** aktivieren.
 
 ### 3. Firebase-Datei ablegen
 

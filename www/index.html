@@ -157,6 +157,19 @@ function waitForCapacitor(cb, timeout = 3000) {
 
 waitForCapacitor(async () => {
   const { Preferences, SmsGateway } = window.Capacitor.Plugins;
+  // Android App Link beim Kaltstart: Ziel inklusive Pfad, Query und Fragment
+  // in derselben WebView öffnen, bevor die normale Startlogik weiterleitet.
+  try {
+    const launch = await window.Capacitor.Plugins.App?.getLaunchUrl();
+    if (launch?.url) {
+      const target = new URL(launch.url);
+      if (target.origin === 'https://einsatzcockpit.com' && !target.username && !target.password) {
+        await Preferences.set({ key: 'el_base_url', value: target.origin });
+        window.location.replace(target.href);
+        return;
+      }
+    }
+  } catch (_) { /* Ohne gültigen App Link normal starten. */ }
   // Standort ist eine Laufzeitberechtigung. Die Auto-Update-Variante öffnet
   // zusätzlich einmal die Android-Systemseite für "Unbekannte Apps installieren".
   // Beide Entscheidungen liegen beim Geräteinhaber und können nicht still gesetzt werden.
