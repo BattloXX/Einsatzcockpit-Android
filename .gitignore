@@ -1,5 +1,6 @@
 node_modules/
 /android/
+plugins/sms-gateway/android/build/
 *.keystore
 !debug.keystore
 google-services.json
