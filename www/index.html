@@ -210,6 +210,7 @@ waitForCapacitor(async () => {
   if (pinToken) {
     setStatus('Anmelden…');
     await Preferences.set({ key: 'el_device_token', value: pinToken });
+    await Preferences.remove({ key: 'ec_device_access_invalid' });
 
     const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
     // Geräte sind für die Offline-Einsatzvorbereitung vorgesehen. Eine frühere,
@@ -256,6 +257,23 @@ waitForCapacitor(async () => {
       await SmsGateway.startGateway({ url: gwUrl, token: gwToken });
       await ensureBatteryOptimizationOff(SmsGateway);
     }
+  }
+
+  // Gerätezugang abgelaufen/widerrufen (vom Server gemeldet, siehe DeviceAccessState.kt):
+  // keine automatische Anmeldung, stattdessen Hinweis und erneutes Verbinden.
+  const { value: accessInvalid } = await Preferences.get({ key: 'ec_device_access_invalid' });
+  if (accessInvalid && !hasDevice) {
+    const DevKA = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (DevKA) { try { await DevKA.stopKeepalive(); } catch (_) {} }
+    setStatus('Gerätezugang ungültig');
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('setupCard').style.display = '';
+    const err = document.getElementById('error');
+    err.textContent = 'Der Gerätezugang ist abgelaufen oder wurde deaktiviert. Bitte das Gerät erneut verbinden.';
+    err.style.display = '';
+    const scan = document.getElementById('scanBtn');
+    scan.textContent = 'Erneut verbinden (QR-Code scannen)';
+    return;
   }
 
   if (hasDevice) {
@@ -467,6 +485,7 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
     await Preferences.set({ key: 'el_gateway_url',   value: baseUrl });
     await Preferences.set({ key: 'el_gateway_token', value: gatewayTok });
     await Preferences.set({ key: 'el_device_token',  value: token });
+    await Preferences.remove({ key: 'ec_device_access_invalid' });
     await Preferences.set({ key: 'el_base_url',      value: baseUrl });
 
     if (SmsGateway) {
@@ -510,6 +529,7 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
     // ── Einheit-Gerät-Modus ────────────────────────────────────────────────
     setStatus('Anmelden…');
     await Preferences.set({ key: 'el_device_token', value: token });
+    await Preferences.remove({ key: 'ec_device_access_invalid' });
     await Preferences.set({ key: 'el_base_url', value: parsed.origin });
     const UnitKA = window.Capacitor?.Plugins?.DeviceKeepalive;
     if (UnitKA) { try { await UnitKA.setObjectSyncEnabled({ enabled: true }); } catch (_) {} }

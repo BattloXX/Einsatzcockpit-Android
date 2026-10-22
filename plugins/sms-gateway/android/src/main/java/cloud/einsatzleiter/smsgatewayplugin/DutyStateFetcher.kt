@@ -26,8 +26,12 @@ object DutyStateFetcher {
         val baseUrl = prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null)?.trimEnd('/')
             ?.takeIf { it.isNotBlank() }
         if (baseUrl == null) return log(reason, Outcome.NO_CONFIG)
+        // Endgueltig ungueltiger Geraetezugang: keine automatischen Anfragen mehr (SEC-02)
+        if (DeviceAccessState.isInvalid(context)) return log(reason, Outcome.AUTH_FAILED, "(Gerätezugang ungültig)")
         val request = try {
-            Request.Builder().url(dutyStateUrl(baseUrl, reportedAppVersion(context, prefs))).get().apply {
+            DeviceAccessState.withDeviceHeaders(
+                Request.Builder().url(dutyStateUrl(baseUrl, reportedAppVersion(context, prefs))).get(),
+            ).apply {
                 prefs.getString("el_device_token", null)?.takeIf { it.isNotBlank() }
                     ?.let { header("Authorization", "Bearer $it") }
             }.build()
@@ -37,6 +41,10 @@ object DutyStateFetcher {
         return try {
             client.newCall(request).execute().use { response ->
                 when {
+                    DeviceAccessState.finalCode(response) != null -> {
+                        DeviceAccessState.markInvalid(context, requireNotNull(DeviceAccessState.finalCode(response)))
+                        log(reason, Outcome.AUTH_FAILED)
+                    }
                     response.code == 401 || response.code == 403 -> {
                         EcpWidgetSupport.clearIncident(context)
                         EcpWidgetSupport.clearGslQueue(context)

@@ -151,6 +151,8 @@ class DeviceKeepalivePlugin : Plugin() {
 
     @PluginMethod
     fun startKeepalive(call: PluginCall) {
+        // Neuer Geraete-Token gespeichert -> alter "Zugang ungueltig"-Zustand und Hinweis aufheben
+        DeviceAccessState.reconcile(context)
         ObjektOfflineSyncWorker.schedule(context)
         ObjektOfflineSyncWorker.triggerImmediateSync(context)
         if (context.resources.getBoolean(R.bool.auto_update_enabled)) {
