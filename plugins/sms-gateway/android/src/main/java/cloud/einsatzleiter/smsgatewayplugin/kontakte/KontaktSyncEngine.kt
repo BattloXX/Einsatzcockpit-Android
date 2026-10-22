@@ -2,6 +2,7 @@ package cloud.einsatzleiter.smsgatewayplugin.kontakte
 
 import android.content.Context
 import androidx.room.withTransaction
+import cloud.einsatzleiter.smsgatewayplugin.DeviceAccessState
 import cloud.einsatzleiter.smsgatewayplugin.EinsatzLivePoller
 import cloud.einsatzleiter.smsgatewayplugin.OfflineCacheStatusStore
 import cloud.einsatzleiter.smsgatewayplugin.WebViewCookieJar
@@ -35,6 +36,8 @@ class KontaktSyncEngine(
         val db = databaseProvider(appContext)
 
         if (baseUrl.isNullOrBlank()) return@withContext fail(db, "Server-URL fehlt")
+        // Ungueltiger Geraetezugang: kein Retry, der Hinweis fuehrt zur erneuten Kopplung
+        if (DeviceAccessState.isInvalid(appContext)) return@withContext true
         try {
             OfflineCacheStatusStore.logActivity(appContext, "Kontakt-Sync verbindet mit $baseUrl")
             val status = db.syncStatusDao().get()
@@ -49,6 +52,10 @@ class KontaktSyncEngine(
                 appContext,
                 "Kontakte aktualisiert: $contactCount/$contactCount Kontakte offline verfügbar",
             )
+            true
+        } catch (error: AccessInvalidException) {
+            DeviceAccessState.markInvalid(appContext, error.code)
+            OfflineCacheStatusStore.logActivity(appContext, "Kontakt-Sync beendet: Gerätezugang ungültig")
             true
         } catch (error: Exception) {
             val message = error.message ?: error.javaClass.simpleName
@@ -192,6 +199,7 @@ class KontaktSyncEngine(
             throw SyncException("Ungültige Server-URL", error)
         }
         httpClient.newCall(request).execute().use { response ->
+            DeviceAccessState.finalCode(response)?.let { throw AccessInvalidException(it) }
             val body = response.body?.string()
             if (!response.isSuccessful || body == null) {
                 throw SyncException("Sync-Serverfehler HTTP ${response.code}")
@@ -313,6 +321,9 @@ class KontaktSyncEngine(
     }
 
     private class SyncException(message: String, cause: Throwable? = null) : IOException(message, cause)
+
+    /** Server meldet endgueltig ungueltigen Geraetezugang (kein temporaerer Fehler). */
+    private class AccessInvalidException(val code: String) : IOException("Gerätezugang ungültig ($code)")
 
     private companion object {
         const val SUPPORTED_SCHEMA_VERSION = 1

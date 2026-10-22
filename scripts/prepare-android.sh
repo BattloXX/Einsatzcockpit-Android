@@ -12,6 +12,11 @@ npx cap sync android
 # Eigene Activity verarbeitet App Links auch bei bereits laufender App.
 cp scripts/MainActivity.java android/app/src/main/java/cloud/einsatzleiter/app/MainActivity.java
 
+# Pull-to-Refresh (MainActivity nutzt SwipeRefreshLayout)
+grep -q "androidx.swiperefreshlayout" android/app/build.gradle || \
+  sed -i "s|^dependencies {|dependencies {\n    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'|" android/app/build.gradle
+grep -q "androidx.swiperefreshlayout" android/app/build.gradle || { echo "SwipeRefresh-Abhaengigkeit fehlgeschlagen"; exit 1; }
+
 # Android SDK 36 und AGP
 sed -i "s|com.android.tools.build:gradle:8.7.2|com.android.tools.build:gradle:8.9.1|" android/build.gradle
 sed -i "s|compileSdkVersion = 35|compileSdkVersion = 36|" android/variables.gradle

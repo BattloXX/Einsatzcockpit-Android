@@ -33,6 +33,10 @@ object FcmTokenRegistration {
                 callback(Result.failure(IllegalStateException("Server-URL fehlt")))
                 return
             }
+            if (DeviceAccessState.isInvalid(context)) {
+                callback(Result.failure(IllegalStateException(DeviceAccessState.MESSAGE)))
+                return
+            }
             val authHeader = getAuthHeader(context, baseUrl)
             if (authHeader == null) {
                 callback(Result.failure(IllegalStateException(
@@ -49,16 +53,15 @@ object FcmTokenRegistration {
             val body = json
                 .toString()
                 .toRequestBody("application/json".toMediaType())
-            val request = Request.Builder()
-                .url("$baseUrl/api/v1/device/fcm-token")
-                .header(authHeader.first, authHeader.second)
-                .post(body)
-                .build()
+            val request = DeviceAccessState.withDeviceHeaders(
+                Request.Builder().url("$baseUrl/api/v1/device/fcm-token"),
+            ).header(authHeader.first, authHeader.second).post(body).build()
             httpClient.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) = callback(Result.failure(e))
 
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
+                        DeviceAccessState.finalCode(it)?.let { code -> DeviceAccessState.markInvalid(context, code) }
                         if (it.isSuccessful) callback(Result.success(Unit))
                         else callback(Result.failure(IOException("Server antwortet mit HTTP ${it.code}")))
                     }

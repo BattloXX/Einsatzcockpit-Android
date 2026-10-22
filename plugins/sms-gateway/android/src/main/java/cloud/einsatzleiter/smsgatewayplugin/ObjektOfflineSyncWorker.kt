@@ -193,6 +193,11 @@ class ObjektOfflineSyncWorker(
 
     override fun doWork(): Result {
         if (!isEnabled(applicationContext)) return Result.success()
+        if (DeviceAccessState.isInvalid(applicationContext)) {
+            OfflineCacheStatusStore.logActivity(applicationContext, "Objekt-Sync übersprungen: Gerätezugang ungültig")
+            WorkManager.getInstance(applicationContext).cancelUniqueWork(WORK_NAME)
+            return Result.success()
+        }
         val prefs = preferences(applicationContext)
         if (prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null).isNullOrBlank()) {
             OfflineCacheStatusStore.logActivity(applicationContext, "Objekt-Sync übersprungen: App ist nicht angemeldet")

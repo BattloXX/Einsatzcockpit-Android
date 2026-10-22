@@ -124,6 +124,11 @@ class EinsatzLivePoller(
             schedule(IDLE_INTERVAL_MS)
             return
         }
+        if (DeviceAccessState.isInvalid(context)) {
+            log("Live-Poll gestoppt: Gerätezugang ungültig")
+            stop()
+            return
+        }
         if (prefs.getString("el_device_token", null).isNullOrBlank()) {
             log("Live-Poll ohne Device-Token; bestehende Session-Authentifizierung wird verwendet")
         }
@@ -137,9 +142,7 @@ class EinsatzLivePoller(
             "$baseUrl/api/v1/device/duty-state?app_version=$encodedVersion"
         }
         val request = try {
-            Request.Builder()
-                .url(dutyStateUrl)
-                .get()
+            DeviceAccessState.withDeviceHeaders(Request.Builder().url(dutyStateUrl).get())
                 .apply { deviceToken?.let { header("Authorization", "Bearer $it") } }
                 .build()
         } catch (_: IllegalArgumentException) {
@@ -159,11 +162,13 @@ class EinsatzLivePoller(
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
                         val code = it.code
+                        val invalidCode = DeviceAccessState.finalCode(it)
                         val body = it.body?.string()
                         handler.post {
                             inFlight = null
                             if (!running) return@post
                             when {
+                                invalidCode != null -> handleAccessInvalid(invalidCode)
                                 code == 401 || code == 403 -> handleAuthFailure(code)
                                 code in 200..299 && body != null -> handleSuccess(baseUrl, body)
                                 else -> handleNetworkFailure(baseUrl)
@@ -231,6 +236,16 @@ class EinsatzLivePoller(
         idleSinceMs = null
         onNeeded()
         schedule(ACTIVE_INTERVAL_MS)
+    }
+
+    /** Endgültig ungültiger Gerätezugang: keine weiteren Versuche, Hinweis für den Nutzer. */
+    private fun handleAccessInvalid(code: String) {
+        log("Live-Poll beendet: Gerätezugang ungültig ($code)")
+        failures = 0
+        clearIncident()
+        DeviceAccessState.markInvalid(context, code)
+        stop()
+        onIdleTimeout()
     }
 
     private fun handleAuthFailure(statusCode: Int) {
