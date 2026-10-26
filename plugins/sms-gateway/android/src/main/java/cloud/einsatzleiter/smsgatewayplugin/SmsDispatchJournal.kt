@@ -152,6 +152,9 @@ class SmsDispatchProtocol(
             .put("delivery_verified", false).put("attempted", row.optInt("attempted") != 0)
             .put("not_sent", phase == "failed" && row.optInt("attempted") == 0)
             .put("error", row.optString("error", "")))
+        // Legacy-Cloud (sms.send ohne job_id) sendet nie sms.result.ack: einmal melden genügt.
+        if (phase in listOf("sent", "failed", "uncertain") && row.getString("job_id") == row.getString("wire_id"))
+            journal.acknowledge(scope, row.getString("wire_id"))
     }
     fun pump(scope: String) = journal.pending(scope).forEach { report(scope, it) }
     fun hello(scope: String) = JSONObject().put("type", "hello").put("role", "sms-gateway")

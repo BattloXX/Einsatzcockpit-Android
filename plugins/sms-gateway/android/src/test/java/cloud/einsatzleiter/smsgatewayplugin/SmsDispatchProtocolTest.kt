@@ -59,6 +59,24 @@ class SmsDispatchProtocolTest {
         protocol.handle(scope, message("sms.commit"))
         assertEquals(1, submissions)
     }
+    @Test fun legacyCloudResultIsReportedOnceWithoutAck() {
+        val legacy = JSONObject().put("type", "sms.send").put("id", "legacy-1")
+            .put("to", "+430000").put("text", "Testalarm")
+        protocol.handle(scope, legacy)
+        assertEquals(1, submissions)
+        callback!!(0, 1, true)
+        assertTrue(reports.last().second.getBoolean("ok"))
+        reports.clear()
+        protocol.pump(scope)
+        assertTrue(reports.none { it.second.getString("type") == "sms.result" })
+        protocol.handle(scope, message("sms.prepare"))
+        callback = null
+        protocol.handle(scope, message("sms.commit"))
+        callback!!(0, 1, true)
+        reports.clear()
+        protocol.pump(scope)
+        assertTrue(reports.any { it.second.getString("type") == "sms.result" })
+    }
     @Test fun restartAfterIntentIsUncertainAndCannotSendAgain() {
         protocol.handle(scope, message("sms.prepare"))
         protocol.handle(scope, message("sms.commit"))
