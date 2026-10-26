@@ -1,6 +1,8 @@
 package cloud.einsatzleiter.smsgatewayplugin
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
@@ -18,6 +20,7 @@ class SmsDispatchProtocolTest {
     private lateinit var journal: SmsDispatchJournal
     private lateinit var protocol: SmsDispatchProtocol
     private val reports = mutableListOf<Pair<String, JSONObject>>()
+    private var now = 40 * 24 * 60 * 60_000L
     private var submissions = 0
     private var reject: String? = null
     private var callback: ((Int, Int, Boolean) -> Unit)? = null
@@ -37,7 +40,7 @@ class SmsDispatchProtocolTest {
     @Before fun setup() {
         context = RuntimeEnvironment.getApplication()
         context.deleteDatabase("sms-dispatch-v2.db")
-        journal = SmsDispatchJournal(context)
+        journal = SmsDispatchJournal(context, { scope }, { now })
         install()
     }
     @After fun cleanup() { journal.close() }
@@ -60,7 +63,7 @@ class SmsDispatchProtocolTest {
         protocol.handle(scope, message("sms.prepare"))
         protocol.handle(scope, message("sms.commit"))
         journal.close()
-        journal = SmsDispatchJournal(context)
+        journal = SmsDispatchJournal(context, { scope }, { now })
         journal.recover()
         install()
         protocol.handle(scope, message("sms.commit"))
@@ -71,7 +74,7 @@ class SmsDispatchProtocolTest {
     @Test fun reconnectBeforeCommitResumesPersistedReceipt() {
         protocol.handle(scope, message("sms.prepare"))
         journal.close()
-        journal = SmsDispatchJournal(context)
+        journal = SmsDispatchJournal(context, { scope }, { now })
         journal.recover()
         install()
         assertEquals("received", protocol.hello(scope).getJSONArray("open_jobs").getJSONObject(0).getString("state"))
@@ -118,5 +121,121 @@ class SmsDispatchProtocolTest {
         protocol.handle(scope, message("sms.prepare", 2).put("text", "different"))
         assertEquals("uncertain", reports.last().second.getString("outcome"))
         assertEquals(0, submissions)
+    }
+    @Test fun purgeKeepsUnacknowledgedCurrentJobsAndRecentOrNonterminalRows() {
+        val day = 24 * 60 * 60_000L
+        val purgeAt = now
+        val foreign = SmsDispatchJournal.scope("https://cloud.test", "old-token")
+        fun add(namespace: String, id: String, age: Long, phase: String, acked: Boolean) {
+            now = purgeAt - age
+            journal.prepare(namespace, message("sms.prepare").put("job_id", id).put("id", id))
+            when (phase) {
+                "failed" -> journal.reject(namespace, id, 1, "preflight_failed")
+                "attempting", "sent", "uncertain" -> {
+                    journal.beginAttempt(namespace, id, 1)
+                    if (phase == "sent") journal.part(namespace, id, 1, 0, 1, true)
+                    if (phase == "uncertain") journal.uncertain(namespace, id, 1, "unknown")
+                }
+            }
+            if (acked) journal.acknowledge(namespace, id)
+        }
+        for (phase in listOf("sent", "failed", "uncertain")) {
+            add(scope, "$phase-old-acked", 8 * day, phase, true)
+            add(scope, "$phase-boundary", 7 * day, phase, true)
+            add(scope, "$phase-recent", day, phase, true)
+            add(scope, "$phase-unacked", 31 * day, phase, false)
+        }
+        for (phase in listOf("received", "attempting")) {
+            add(scope, phase, 31 * day, phase, false)
+        }
+        add(foreign, "foreign-old", 31 * day, "received", false)
+        add(foreign, "foreign-old-attempt", 31 * day, "attempting", false)
+        add(foreign, "foreign-boundary", 30 * day, "received", false)
+        add(foreign, "foreign-recent", 29 * day, "uncertain", false)
+        now = purgeAt
+        journal.purge(now)
+        for (phase in listOf("sent", "failed", "uncertain")) {
+            assertNull(journal.get(scope, "$phase-old-acked"))
+            assertNotNull(journal.get(scope, "$phase-boundary"))
+            assertNotNull(journal.get(scope, "$phase-recent"))
+            assertNotNull(journal.get(scope, "$phase-unacked"))
+        }
+        assertNotNull(journal.get(scope, "received"))
+        assertNotNull(journal.get(scope, "attempting"))
+        assertNull(journal.get(foreign, "foreign-old"))
+        assertNull(journal.get(foreign, "foreign-old-attempt"))
+        assertNotNull(journal.get(foreign, "foreign-boundary"))
+        assertNotNull(journal.get(foreign, "foreign-recent"))
+    }
+    @Test fun staleAttemptReportsUncertainAndLateCallbacksCannotChangeIt() {
+        protocol.handle(scope, message("sms.send"))
+        val startedAt = now
+        assertEquals(startedAt, journal.get(scope, "job")!!.getLong("attempted_at"))
+        now += 5 * 60_000L + 1
+        reports.clear()
+        journal.expireStaleAttempts(now)
+        protocol.pump(scope)
+        val row = journal.get(scope, "job")!!
+        assertEquals("uncertain", row.getString("phase"))
+        assertEquals("multipart_callback_timeout", row.getString("error"))
+        assertTrue(row.isNull("recipient"))
+        assertTrue(row.isNull("body"))
+        val result = reports.last().second
+        assertEquals("sms.result", result.getString("type"))
+        assertEquals("uncertain", result.getString("outcome"))
+        assertEquals("multipart_callback_timeout", result.getString("error"))
+        assertTrue(result.getBoolean("attempted"))
+        callback!!(0, 1, true)
+        protocol.handle(scope, message("sms.commit"))
+        assertEquals("uncertain", journal.get(scope, "job")!!.getString("phase"))
+        assertEquals(1, submissions)
+    }
+    @Test fun freshAttemptAndExactTimeoutBoundaryStayAttempting() {
+        protocol.handle(scope, message("sms.prepare"))
+        now += 10 * 60_000L
+        protocol.handle(scope, message("sms.commit"))
+        journal.expireStaleAttempts(now)
+        assertEquals("attempting", journal.get(scope, "job")!!.getString("phase"))
+        journal.expireStaleAttempts(now + 5 * 60_000L)
+        assertEquals("attempting", journal.get(scope, "job")!!.getString("phase"))
+        journal.expireStaleAttempts(now + 1_001, 1_000)
+        assertEquals("uncertain", journal.get(scope, "job")!!.getString("phase"))
+    }
+    @Test fun upgradeFromVersionOnePreservesRowsAndAddsAttemptTimestampAndIndex() {
+        journal.close()
+        context.deleteDatabase("sms-dispatch-v2.db")
+        val legacy = object : SQLiteOpenHelper(context, "sms-dispatch-v2.db", null, 1) {
+            override fun onCreate(db: SQLiteDatabase) {
+                db.execSQL("""CREATE TABLE sms_jobs (
+                    scope TEXT NOT NULL, job_id TEXT NOT NULL, generation INTEGER NOT NULL,
+                    wire_id TEXT NOT NULL, payload_hash TEXT NOT NULL, recipient TEXT, body TEXT,
+                    phase TEXT NOT NULL, attempted INTEGER NOT NULL DEFAULT 0,
+                    parts INTEGER NOT NULL DEFAULT 0, results TEXT NOT NULL DEFAULT '{}',
+                    error TEXT, result_acked INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL, PRIMARY KEY(scope, job_id))""")
+            }
+            override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+        }
+        legacy.writableDatabase.execSQL("""INSERT INTO sms_jobs
+            (scope, job_id, generation, wire_id, payload_hash, recipient, body, phase, created_at)
+            VALUES (?, 'job', 1, 'job:1', ?, '+430000', 'Testalarm', 'received', ?)""",
+            arrayOf(scope, SmsDispatchJournal.digest("+430000\u0000Testalarm"), now))
+        legacy.close()
+        journal = SmsDispatchJournal(context, { scope }, { now })
+        val row = journal.get(scope, "job")!!
+        assertEquals(2, journal.readableDatabase.version)
+        assertEquals("received", row.getString("phase"))
+        assertEquals("Testalarm", row.getString("body"))
+        assertEquals(now, row.getLong("created_at"))
+        assertTrue(row.has("attempted_at"))
+        assertTrue(row.isNull("attempted_at"))
+        journal.readableDatabase.rawQuery("PRAGMA index_info(sms_jobs_retention)", null).use { cursor ->
+            val columns = buildList { while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name"))) }
+            assertEquals(listOf("scope", "result_acked", "created_at"), columns)
+        }
+        install()
+        protocol.handle(scope, message("sms.commit"))
+        assertEquals(1, submissions)
+        assertEquals(now, journal.get(scope, "job")!!.getLong("attempted_at"))
     }
 }

@@ -10,17 +10,26 @@ import org.json.JSONObject
 import java.security.MessageDigest
 
 /** Durable receipt and send-intent boundary, scoped to the paired cloud/token. */
-class SmsDispatchJournal(context: Context) : SQLiteOpenHelper(context, "sms-dispatch-v2.db", null, 1) {
+class SmsDispatchJournal(
+    context: Context, private val currentScope: () -> String,
+    private val clock: () -> Long = System::currentTimeMillis
+) : SQLiteOpenHelper(context, "sms-dispatch-v2.db", null, 2) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE sms_jobs (
             scope TEXT NOT NULL, job_id TEXT NOT NULL, generation INTEGER NOT NULL,
             wire_id TEXT NOT NULL, payload_hash TEXT NOT NULL, recipient TEXT, body TEXT,
-            phase TEXT NOT NULL, attempted INTEGER NOT NULL DEFAULT 0,
+            phase TEXT NOT NULL, attempted INTEGER NOT NULL DEFAULT 0, attempted_at INTEGER,
             parts INTEGER NOT NULL DEFAULT 0, results TEXT NOT NULL DEFAULT '{}',
             error TEXT, result_acked INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL, PRIMARY KEY(scope, job_id))""")
+        db.execSQL("CREATE INDEX sms_jobs_retention ON sms_jobs(scope, result_acked, created_at)")
     }
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE sms_jobs ADD COLUMN attempted_at INTEGER")
+            db.execSQL("CREATE INDEX sms_jobs_retention ON sms_jobs(scope, result_acked, created_at)")
+        }
+    }
     companion object {
         fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
             .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
@@ -59,13 +68,13 @@ class SmsDispatchJournal(context: Context) : SQLiteOpenHelper(context, "sms-disp
             put("scope", scope); put("job_id", jobId); put("generation", generation); put("wire_id", wire)
             put("payload_hash", hash); put("recipient", recipient); put("body", body); put("phase", "received")
             put("attempted", 0); put("results", "{}"); put("result_acked", 0); put("parts", 0)
-            put("created_at", System.currentTimeMillis())
+            put("created_at", clock())
         }, SQLiteDatabase.CONFLICT_REPLACE)
         return get(scope, jobId)
     }
     @Synchronized fun beginAttempt(scope: String, jobId: String, generation: Int): JSONObject? {
         val changed = writableDatabase.update("sms_jobs", ContentValues().apply {
-            put("phase", "attempting"); put("attempted", 1)
+            put("phase", "attempting"); put("attempted", 1); put("attempted_at", clock())
         }, "scope=? AND job_id=? AND generation=? AND phase='received'", arrayOf(scope, jobId, generation.toString()))
         return if (changed == 1) get(scope, jobId) else null
     }
@@ -103,6 +112,17 @@ class SmsDispatchJournal(context: Context) : SQLiteOpenHelper(context, "sms-disp
     @Synchronized fun acknowledge(scope: String, wire: String) {
         writableDatabase.update("sms_jobs", ContentValues().apply { put("result_acked", 1) },
             "scope=? AND wire_id=? AND phase IN ('sent','failed','uncertain')", arrayOf(scope, wire))
+    }
+    @Synchronized fun purge(now: Long) {
+        writableDatabase.delete("sms_jobs",
+            "(result_acked=1 AND phase IN ('sent','failed','uncertain') AND created_at<?) OR (scope<>? AND created_at<?)",
+            arrayOf((now - 7 * 24 * 60 * 60_000L).toString(), currentScope(), (now - 30 * 24 * 60 * 60_000L).toString()))
+    }
+    @Synchronized fun expireStaleAttempts(now: Long, maxAgeMs: Long = 5 * 60_000L) {
+        writableDatabase.update("sms_jobs", ContentValues().apply {
+            put("phase", "uncertain"); put("error", "multipart_callback_timeout")
+            putNull("recipient"); putNull("body")
+        }, "phase='attempting' AND attempted_at<?", arrayOf((now - maxAgeMs).toString()))
     }
     @Synchronized fun recover() {
         writableDatabase.update("sms_jobs", ContentValues().apply {

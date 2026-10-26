@@ -218,8 +218,18 @@ class SmsGatewayService : Service() {
     private val reportHandler = Handler(Looper.getMainLooper())
     private val pendingSendReceivers = CopyOnWriteArrayList<BroadcastReceiver>()
     private fun dispatchScope() = SmsDispatchJournal.scope(wsUrl, token)
+    private var lastDispatchPurgeAt: Long? = null
+    @Synchronized private fun maintainDispatchJournal() {
+        val now = System.currentTimeMillis()
+        dispatchJournal.expireStaleAttempts(now)
+        if (lastDispatchPurgeAt == null || now - lastDispatchPurgeAt!! >= 60 * 60_000L) {
+            dispatchJournal.purge(now)
+            lastDispatchPurgeAt = now
+        }
+    }
     private val reportTick = object : Runnable {
         override fun run() {
+            if (running) maintainDispatchJournal()
             if (running && isConnected) dispatchProtocol.pump(dispatchScope())
             if (running) reportHandler.postDelayed(this, 5_000)
         }
@@ -232,7 +242,7 @@ class SmsGatewayService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        dispatchJournal = SmsDispatchJournal(applicationContext)
+        dispatchJournal = SmsDispatchJournal(applicationContext, ::dispatchScope)
         dispatchProtocol = SmsDispatchProtocol(dispatchJournal, object : SmsDispatchProtocol.Modem {
             override fun preflight(recipient: String, body: String): String? =
                 if (ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.SEND_SMS) !=
@@ -248,6 +258,7 @@ class SmsGatewayService : Service() {
         wsUrl = prefs.getString("el_gateway_url", "") ?: ""
         token = prefs.getString("el_gateway_token", "") ?: ""
         dispatchJournal.recover()
+        if (wsUrl.isNotEmpty() && token.isNotEmpty()) maintainDispatchJournal()
         // Empfangs-Receiver ggf. sofort wieder aktivieren (Neustart nach Boot/Kill)
         updateSmsReceiver()
     }
@@ -467,6 +478,7 @@ class SmsGatewayService : Service() {
 
     @Synchronized private fun connect() {
         if (!running) return
+        maintainDispatchJournal()
         // Nur eine Verbindung gleichzeitig: Watchdog, scheduleReconnect und
         // NetworkCallback können connect() parallel aufrufen – ohne diesen Guard
         // entstünden mehrere WebSockets (und serverseitig tote Doppel-Registrierungen).
