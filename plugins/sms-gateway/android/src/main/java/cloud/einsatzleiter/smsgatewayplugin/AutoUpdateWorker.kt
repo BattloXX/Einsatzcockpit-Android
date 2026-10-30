@@ -32,6 +32,8 @@ class AutoUpdateWorker(
         private const val WORK_NAME = "apk-auto-update"
         private const val IMMEDIATE_WORK_NAME = "apk-auto-update-immediate"
         private const val INTERVAL_HOURS = 12L
+        private const val PREF_START_CHECK = "ec_auto_update_start_check_at"
+        private val START_CHECK_INTERVAL_MS = TimeUnit.HOURS.toMillis(6)
         private const val PREF_UPDATE_CHANNEL = "ec_update_channel"
         private const val RELEASES_URL = "https://api.github.com/repos/BattloXX/Einsatzcockpit-Android/releases"
         private const val AUTO_UPDATE_ASSET_PREFIX = "einsatzcockpit-autoupdate-v"
@@ -51,6 +53,18 @@ class AutoUpdateWorker(
                 ExistingPeriodicWorkPolicy.KEEP,
                 request,
             )
+        }
+
+        /** Persist the enqueue time so WebView reloads and process restarts share the limit. */
+        @Synchronized
+        fun triggerStartupCheck(context: Context) {
+            if (!context.resources.getBoolean(R.bool.auto_update_enabled)) return
+            val prefs = preferences(context)
+            val now = System.currentTimeMillis()
+            val last = prefs.getLong(PREF_START_CHECK, 0L)
+            if (last > 0L && now - last in 0 until START_CHECK_INTERVAL_MS) return
+            triggerImmediateCheck(context)
+            prefs.edit().putLong(PREF_START_CHECK, now).apply()
         }
 
         /** A user-requested check must replace a stale retry instead of waiting behind it. */

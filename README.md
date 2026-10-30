@@ -229,6 +229,16 @@ Damit die App GPS-Koordinaten auch bei gesperrtem Display sendet, muss in den **
 Für `einsatzcockpit-autoupdate-v*.apk` muss einmalig in den Android-Systemeinstellungen
 für Einsatzcockpit **„Installation unbekannter Apps“** erlaubt werden. Diese Berechtigung
 kann sich eine App nicht selbst erteilen; sie ist für spätere Hintergrund-Updates nötig.
+Auf „Über die App“ und der Gateway-Seite zeigt die Auto-Update-Karte bei fehlender
+Freigabe einen Hinweis mit Button zur passenden Android-Einstellung.
+
+Die Auto-Update-Variante startet beim nativen Plugin-Start eine Hintergrundprüfung,
+höchstens einmal in sechs Stunden; ohne Verbindung wartet WorkManager auf ein Netz.
+Zusätzlich laufen die periodischen Prüfungen alle zwölf Stunden weiter. Erkennen
+„Über die App“ oder die Gateway-Seite ein neueres Release im gewählten Kanal,
+startet der Update-Prozess automatisch, höchstens einmal pro Version und App-Start.
+Bei aktivem Einsatz oder laufender Gateway-Wiederverbindung bleibt die Installation
+verschoben. Varianten ohne Auto-Update behalten den manuellen Download-Button.
 
 ---
 
