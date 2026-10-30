@@ -429,3 +429,28 @@ Route hängen geblieben sind:
 ## Lizenz
 
 **GNU Lesser General Public License v2.1 (LGPL-2.1)** — Johannes Battlogg.
+
+
+## Offline-Start
+
+Nach mindestens einem erfolgreichen Online-Login kann ein bereits aktiver Service Worker
+besuchte oder synchronisierte Seiten öffnen. Der Launcher springt offline weiterhin zu
+`https://einsatzcockpit.com/`. Ohne verfügbaren SW oder bei einem Hauptframe-Netzfehler
+zeigt die App die mitgelieferte `www/offline.html` statt der Chromium-Fehlerseite.
+Unterressourcenfehler und HTTP-/Zertifikatsfehler lösen diese Umleitung nicht aus.
+
+„Erneut versuchen“ lädt die zuletzt versuchte URL; „Objekte (offline)“ öffnet direkt
+die Objektliste, „Kontakte (offline)“ bevorzugt die native Kontaktansicht.
+Bei einem wieder validierten Netz versucht die App die letzte URL automatisch erneut,
+solange die lokale Offline-Seite angezeigt wird. Der Netzwerk-Listener endet mit der Activity.
+
+Objekt-Sync startet bereits direkt beim Laden der Remote-Seite und nach Geräte-Login;
+der Hintergrundlauf wiederholt sich alle sechs Stunden. Die bestehende Einstellung
+für Objekt-Sync bleibt maßgeblich (Geräte-Login standardmäßig aktiv, persönliche Konten
+nur nach Aktivierung). Eine Erstinstallation ohne Online-Sync hat noch keinen Objektbestand.
+Die versionierte Vorlage `scripts/MainActivity.java` wird beim Projektaufbau in
+`android/app/src/main/java/cloud/einsatzleiter/app/MainActivity.java` kopiert.
+Nach Änderungen an `www/` vor einem regulären Build `npx cap copy android` ausführen.
+Ohne Gerät/Emulator können Flugmodus, SW-Kaltstart und Netzwechsel nur im Code geprüft werden.
+
+Lokale Tests der Offline-Seite: `node --test scripts/offline-page.test.mjs`.
