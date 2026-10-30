@@ -255,6 +255,31 @@
     </div>
   </div>
 
+  <div class="card" id="autoUpdateCard" style="display:none;">
+    <div class="card-label">⚙️ Auto-Update</div>
+    <div class="version-row">
+      <span class="version-label">Letzter Check</span>
+      <span class="version-value" id="autoUpdateChecked">Noch nicht geprüft</span>
+    </div>
+    <div class="version-row">
+      <span class="version-label">Release</span>
+      <span class="version-value" id="autoUpdateRelease">–</span>
+    </div>
+    <div class="version-row">
+      <span class="version-label">Download</span>
+      <span class="version-value" id="autoUpdateDownload">–</span>
+    </div>
+    <div class="version-row">
+      <span class="version-label">Installation</span>
+      <span class="version-value" id="autoUpdateInstall">–</span>
+    </div>
+    <div id="autoUpdatePermission" style="display:none;margin-top:10px;">
+      <p>Für automatische Updates bitte „Unbekannte Apps installieren“ für Einsatzcockpit erlauben.</p>
+      <button class="btn-primary" onclick="openAutoUpdateInstallSettings()">Installation erlauben</button>
+    </div>
+    <p id="autoUpdateError" style="display:none;font-size:.82rem;color:var(--red);margin-top:10px;"></p>
+  </div>
+
   <!-- Verbindungslog -->
   <div class="card">
     <div class="conn-log-header">

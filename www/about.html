@@ -174,6 +174,10 @@
       <span class="version-label">Installation</span>
       <span class="version-value" id="autoUpdateInstall">–</span>
     </div>
+    <div id="autoUpdatePermission" style="display:none;margin-top:10px;">
+      <p>Für automatische Updates bitte „Unbekannte Apps installieren“ für Einsatzcockpit erlauben.</p>
+      <button class="btn-primary" onclick="openAutoUpdateInstallSettings()">Installation erlauben</button>
+    </div>
     <p id="autoUpdateError" style="display:none;font-size:.82rem;color:var(--red);margin-top:10px;"></p>
   </div>
 
@@ -278,7 +282,6 @@ let SmsGateway;
 let AlarmChannel;
 let Preferences;
 let alarmDndSetupPending = false;
-let autoUpdateVariant = false;
 
 waitForCapacitor(async () => {
   Preferences = window.Capacitor.Plugins.Preferences;
@@ -302,10 +305,6 @@ waitForCapacitor(async () => {
   updateOfflineCacheStatus();
   setInterval(updateOfflineCacheStatus, 5000);
 });
-
-function autoUpdateText(value, fallback = '–') {
-  return value && String(value).trim() ? String(value) : fallback;
-}
 
 const DEVICE_STATUS_REPORTING_KEY = 'ec_device_status_reporting_enabled';
 
@@ -332,28 +331,6 @@ async function setDeviceStatusReportingEnabled(enabled) {
   } catch (_) {
     if (toggle) toggle.checked = !enabled;
     toast('Einstellung zur Geräteinfo konnte nicht gespeichert werden.');
-  }
-}
-
-async function updateAutoUpdateStatus() {
-  if (!autoUpdateVariant) return;
-  const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
-  if (!plugin?.getAutoUpdateStatus) return;
-  try {
-    const status = await plugin.getAutoUpdateStatus();
-    document.getElementById('autoUpdateChecked').textContent = status.lastCheckedAtMs
-      ? formatCacheTime(status.lastCheckedAtMs)
-      : 'Noch nicht geprüft';
-    document.getElementById('autoUpdateRelease').textContent = status.releaseVersion
-      ? 'v' + status.releaseVersion
-      : '–';
-    document.getElementById('autoUpdateDownload').textContent = autoUpdateText(status.downloadResult, status.activity || '–');
-    document.getElementById('autoUpdateInstall').textContent = autoUpdateText(status.installResult);
-    const error = document.getElementById('autoUpdateError');
-    error.textContent = status.error || '';
-    error.style.display = status.error ? '' : 'none';
-  } catch (_) {
-    document.getElementById('autoUpdateChecked').textContent = 'Status nicht verfügbar';
   }
 }
 

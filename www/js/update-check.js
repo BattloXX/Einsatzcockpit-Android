@@ -1,7 +1,9 @@
-// Gemeinsamer manueller GitHub-Release-Check für about.html und gateway.html.
+// Gemeinsamer GitHub-Release-Check für about.html und gateway.html.
 const GITHUB_REPO = 'BattloXX/Einsatzcockpit-Android';
 const UPDATE_CHANNEL_KEY = 'ec_update_channel';
 let latestApkUrl = null;
+let autoUpdateVariant = false;
+const automaticallyRequestedVersions = new Set();
 
 async function initializeUpdateChannelToggle() {
   const select = document.getElementById('updateChannel');
@@ -38,7 +40,7 @@ async function manualUpdateCheck() {
   document.getElementById('availableVersion').className = 'version-value';
   document.getElementById('updateBtnRow').style.display = 'none';
   try {
-    const autoUpdateEnabled = await checkForUpdate();
+    const autoUpdateEnabled = await checkForUpdate(false);
     if (autoUpdateEnabled) {
       try {
         await window.Capacitor?.Plugins?.DeviceKeepalive?.triggerAutoUpdateCheck?.();
@@ -57,7 +59,7 @@ async function manualUpdateCheck() {
   }
 }
 
-async function checkForUpdate() {
+async function checkForUpdate(triggerAutomatically = true) {
   let autoUpdateEnabled = false;
   if (SmsGateway && SmsGateway.getAppVersion) {
     try {
@@ -67,13 +69,9 @@ async function checkForUpdate() {
       document.getElementById('installedVersion').textContent = 'v' + versionName;
       const pill = document.getElementById('verPill');
       if (pill) pill.innerHTML = 'ECPG <b style="color:var(--yellow)">v' + versionName + '</b>';
-      if (typeof autoUpdateVariant !== 'undefined') {
-        autoUpdateVariant = autoUpdateEnabled;
-        if (autoUpdateVariant) {
-          document.getElementById('autoUpdateCard').style.display = '';
-          if (typeof updateAutoUpdateStatus === 'function') updateAutoUpdateStatus();
-        }
-      }
+      autoUpdateVariant = autoUpdateEnabled;
+      document.getElementById('autoUpdateCard').style.display = autoUpdateEnabled ? '' : 'none';
+      if (autoUpdateEnabled) await updateAutoUpdateStatus();
     } catch (_) {
       document.getElementById('installedVersion').textContent = 'unbekannt';
     }
@@ -112,11 +110,23 @@ async function checkForUpdate() {
     const availableEl = document.getElementById('availableVersion');
     const installedVer = installedEl.textContent.replace(/^v/, '');
     const latestVer = latestTag.replace(/^v/, '');
-    if (latestVer && installedVer !== '–' && installedVer !== 'unbekannt' && latestVer !== installedVer) {
+    if (latestVer && installedVer !== '–' && installedVer !== 'unbekannt' && compareUpdateVersions(latestVer, installedVer) > 0) {
       availableEl.textContent = latestTag;
       availableEl.className = 'version-value update-available';
       document.getElementById('updateBtnRow').style.display = asset ? '' : 'none';
       if (typeof addLog === 'function') addLog('Update verfügbar: ' + latestTag + ' (installiert: v' + installedVer + ')');
+      const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
+      if (triggerAutomatically && autoUpdateEnabled && plugin?.triggerAutoUpdateCheck
+          && !automaticallyRequestedVersions.has(latestVer)) {
+        automaticallyRequestedVersions.add(latestVer);
+        document.getElementById('autoUpdateDownload').textContent = 'Update wird geladen...';
+        try {
+          await plugin.triggerAutoUpdateCheck({ automaticVersion: latestVer });
+        } catch (_) {
+          document.getElementById('autoUpdateDownload').textContent = 'Update konnte nicht gestartet werden';
+        }
+        setTimeout(updateAutoUpdateStatus, 2000);
+      }
     } else {
       availableEl.textContent = latestTag + ' ✓';
       availableEl.className = 'version-value up-to-date';
@@ -134,3 +144,58 @@ function downloadApk() {
   if (latestApkUrl) window.open(latestApkUrl, '_system');
   else toast('Kein Download-Link verfügbar');
 }
+
+// Match the native worker's numeric version comparison (including daily suffixes).
+function compareUpdateVersions(first, second) {
+  const left = first.split('.').map(part => /^\d+$/.test(part) ? Number(part) : 0);
+  const right = second.split('.').map(part => /^\d+$/.test(part) ? Number(part) : 0);
+  for (let index = 0; index < Math.max(left.length, right.length); index++) {
+    const difference = (left[index] || 0) - (right[index] || 0);
+    if (difference) return difference;
+  }
+  return 0;
+}
+
+function autoUpdateText(value, fallback = '–') {
+  return value && String(value).trim() ? String(value) : fallback;
+}
+
+async function updateAutoUpdateStatus() {
+  if (!autoUpdateVariant) return;
+  const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
+  if (!plugin?.getAutoUpdateStatus) return;
+  try {
+    const status = await plugin.getAutoUpdateStatus();
+    document.getElementById('autoUpdateChecked').textContent = status.lastCheckedAtMs
+      ? new Date(Number(status.lastCheckedAtMs)).toLocaleString('de-AT', { dateStyle: 'short', timeStyle: 'short' })
+      : 'Noch nicht geprüft';
+    document.getElementById('autoUpdateRelease').textContent = status.releaseVersion
+      ? 'v' + status.releaseVersion
+      : '–';
+    document.getElementById('autoUpdateDownload').textContent = autoUpdateText(status.downloadResult, status.activity || '–');
+    document.getElementById('autoUpdateInstall').textContent = autoUpdateText(status.installResult);
+    document.getElementById('autoUpdatePermission').style.display = status.canRequestPackageInstalls === false ? '' : 'none';
+    const error = document.getElementById('autoUpdateError');
+    error.textContent = status.error || '';
+    error.style.display = status.error ? '' : 'none';
+  } catch (_) {
+    document.getElementById('autoUpdateChecked').textContent = 'Status nicht verfügbar';
+  }
+}
+
+async function openAutoUpdateInstallSettings() {
+  try {
+    await window.Capacitor.Plugins.DeviceKeepalive.openInstallPermissionSettings();
+  } catch (_) {
+    toast('Android-Einstellungen konnten nicht geöffnet werden.');
+  }
+}
+
+// Keep diagnostics and permission state current, including after returning from settings.
+setInterval(() => {
+  if (document.visibilityState === 'visible') updateAutoUpdateStatus();
+}, 5000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') updateAutoUpdateStatus();
+});
+document.addEventListener('resume', updateAutoUpdateStatus);

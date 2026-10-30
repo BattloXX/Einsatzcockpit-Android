@@ -51,6 +51,22 @@ import kotlinx.coroutines.launch
 )
 class DeviceKeepalivePlugin : Plugin() {
 
+    companion object {
+        // Survives navigation between local pages for this app process.
+        private val automaticallyRequestedVersions = mutableSetOf<String>()
+    }
+
+    override fun load() {
+        super.load()
+        AutoUpdateWorker.triggerStartupCheck(context)
+    }
+
+    @PluginMethod
+    fun openInstallPermissionSettings(call: PluginCall) {
+        requestUnknownSourcesPermission()
+        call.resolve()
+    }
+
     /** Requests permissions which must be decided by the device owner at startup. */
     @PluginMethod
     fun requestStartupPermissions(call: PluginCall) {
@@ -234,6 +250,8 @@ class DeviceKeepalivePlugin : Plugin() {
     fun getAutoUpdateStatus(call: PluginCall) {
         val status = AutoUpdateStatusStore.snapshot(context)
         call.resolve(JSObject().apply {
+            put("canRequestPackageInstalls", Build.VERSION.SDK_INT < Build.VERSION_CODES.O
+                || context.packageManager.canRequestPackageInstalls())
             status.lastCheckedAtMs?.let { put("lastCheckedAtMs", it) }
             status.releaseVersion?.let { put("releaseVersion", it) }
             status.downloadResult?.let { put("downloadResult", it) }
@@ -246,7 +264,19 @@ class DeviceKeepalivePlugin : Plugin() {
     /** Starts a one-time native APK update check without changing the periodic schedule. */
     @PluginMethod
     fun triggerAutoUpdateCheck(call: PluginCall) {
-        AutoUpdateWorker.triggerImmediateCheck(context)
+        val automaticVersion = call.getString("automaticVersion")
+        if (automaticVersion != null) {
+            synchronized(automaticallyRequestedVersions) {
+                if (automaticVersion in automaticallyRequestedVersions) {
+                    call.resolve()
+                    return
+                }
+                AutoUpdateWorker.triggerImmediateCheck(context)
+                automaticallyRequestedVersions.add(automaticVersion)
+            }
+        } else {
+            AutoUpdateWorker.triggerImmediateCheck(context)
+        }
         call.resolve()
     }
 
