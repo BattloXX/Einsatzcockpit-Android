@@ -17,6 +17,14 @@ Die App ist ein schlanker **Capacitor-Wrapper** um die bestehende Progressive We
 | **Home-Screen-Widgets** (Kontakte, Objekte, Einsatzstatus, Fahrt erfassen — Direktzugriff ohne App zu öffnen) | `AppWidgetProvider` + `RemoteViews`, Deep-Link in die bestehende WebView-Session; das Einsatz-Widget zeigt bei Koordinaten eine zwischengespeicherte OSM-Karte |
 | **Sideload-APK** (kein Play Store nötig) | Signierte APK via GitHub Actions, CalVer-Versionierung |
 
+Die Live-Einsatzbenachrichtigung zeigt das Phasenlabel mit `Phase n/4`: Alarmiert,
+Anfahrt (Einsatz übernommen), Am Einsatzort und Einsatzbereit. Ab Android 16 (API 36)
+zeigt die promovierte Fortschrittsanzeige drei Segmente mit Trennpunkten bei 100 und
+200; der Fortschritt liegt je Phase bei 10, 100, 200 bzw. 300. Erledigte Abschnitte
+sind gefüllt, offene gedämpft. Ohne diese Darstellung zeigt der Fortschrittsbalken
+eine bis vier von vier Stufen. Adresse, weitere Einsätze und Veraltungshinweise
+bleiben erhalten.
+
 > Die Web-App, das Dashboard und alle Browser-Nutzer funktionieren weiterhin unverändert. Diese App ist ein optionaler nativer Client für den Einsatzbetrieb.
 
 ---
