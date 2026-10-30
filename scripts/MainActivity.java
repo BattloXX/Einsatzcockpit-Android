@@ -5,6 +5,8 @@ import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -12,9 +14,12 @@ import android.os.Looper;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.widget.Toast;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebViewClient;
 import cloud.einsatzleiter.nativefiles.NativeFilesPlugin;
 
 public class MainActivity extends BridgeActivity {
@@ -22,6 +27,10 @@ public class MainActivity extends BridgeActivity {
     private static final String EXTRA_RECONNECT = "cloud.einsatzleiter.smsgatewayplugin.EXTRA_RECONNECT";
     private static final long REFRESH_TIMEOUT_MS = 8000L;
 
+    private boolean offlinePageVisible;
+    private String lastAttemptedUrl = "https://einsatzcockpit.com/";
+    private ConnectivityManager connectivityManager;
+    private ConnectivityManager.NetworkCallback offlineNetworkCallback;
     private boolean started;
     private SwipeRefreshLayout swipe;
     // Von der Seite (native-bridge.js) gesetzt: Karte, Drag-and-Drop, Dialog oder Formular mit
@@ -39,8 +48,76 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         // Cold starts are handled by App.getLaunchUrl() in the local launcher.
         started = true;
+        installOfflineHandling();
         installPullToRefresh();
         installDownloadListener();
+    }
+
+    private String offlineUrl() {
+        return bridge.getLocalUrl() + "/offline.html";
+    }
+
+    private boolean isOfflineUrl(String url) {
+        return url != null && (url.equals(offlineUrl()) || url.startsWith(offlineUrl() + "#"));
+    }
+
+    private boolean isRemotePage(String url) {
+        Uri uri = Uri.parse(url);
+        String host = uri.getHost();
+        return "https".equalsIgnoreCase(uri.getScheme()) && host != null
+                && (host.equals("einsatzcockpit.com") || host.endsWith(".einsatzcockpit.com")
+                || host.equals("einsatzleiter.cloud") || host.endsWith(".einsatzleiter.cloud"));
+    }
+
+    private void installOfflineHandling() {
+        if (bridge == null || bridge.getWebView() == null) return;
+        // Capacitor 7: Unterklasse erhaelt LocalServer-Interception, Navigation,
+        // Bridge-Reset und Listener der originalen BridgeWebViewClient-Klasse.
+        bridge.setWebViewClient(new BridgeWebViewClient(bridge) {
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                offlinePageVisible = isOfflineUrl(url);
+                if (isRemotePage(url)) lastAttemptedUrl = url;
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                if (!request.isForMainFrame() || !isRemotePage(request.getUrl().toString())) return;
+                int code = error.getErrorCode();
+                if (code != ERROR_HOST_LOOKUP && code != ERROR_CONNECT
+                        && code != ERROR_TIMEOUT && code != ERROR_IO) return;
+                lastAttemptedUrl = request.getUrl().toString();
+                offlinePageVisible = true;
+                view.loadUrl(offlineUrl() + "#retry=" + Uri.encode(lastAttemptedUrl));
+            }
+        });
+        connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) return;
+        offlineNetworkCallback = new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onCapabilitiesChanged(Network network, NetworkCapabilities capabilities) {
+                if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return;
+                handler.post(() -> {
+                    if (offlinePageVisible && isOfflineUrl(bridge.getWebView().getUrl())) {
+                        offlinePageVisible = false;
+                        bridge.getWebView().loadUrl(lastAttemptedUrl);
+                    }
+                });
+            }
+        };
+        connectivityManager.registerNetworkCallback(new NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), offlineNetworkCallback);
+    }
+
+    @Override
+    public void onDestroy() {
+        if (connectivityManager != null && offlineNetworkCallback != null) {
+            connectivityManager.unregisterNetworkCallback(offlineNetworkCallback);
+        }
+        handler.removeCallbacks(stopSpinner);
+        super.onDestroy();
     }
 
     private void installDownloadListener() {
