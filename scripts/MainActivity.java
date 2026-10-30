@@ -15,6 +15,7 @@ import android.webkit.WebView;
 import android.widget.Toast;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.getcapacitor.BridgeActivity;
+import cloud.einsatzleiter.nativefiles.NativeFilesPlugin;
 
 public class MainActivity extends BridgeActivity {
     // Gleicher Wert wie DeviceAccessState.EXTRA_RECONNECT im Plugin (Hinweis "Gerätezugang ungültig").
@@ -34,10 +35,20 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(NativeFilesPlugin.class);
         super.onCreate(savedInstanceState);
         // Cold starts are handled by App.getLaunchUrl() in the local launcher.
         started = true;
         installPullToRefresh();
+        installDownloadListener();
+    }
+
+    private void installDownloadListener() {
+        if (bridge == null || bridge.getWebView() == null) return;
+        if (bridge.getPlugin("NativeFiles") == null) return;
+        NativeFilesPlugin files = (NativeFilesPlugin) bridge.getPlugin("NativeFiles").getInstance();
+        bridge.getWebView().setDownloadListener((url, userAgent, disposition, mime, length) ->
+                files.downloadFromWebView(url, userAgent, disposition, mime));
     }
 
     /** Legt ein SwipeRefreshLayout um die vorhandene WebView (keine zweite WebView, kein Reload-Zwang). */

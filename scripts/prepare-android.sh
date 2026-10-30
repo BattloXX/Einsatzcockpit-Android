@@ -12,6 +12,15 @@ npx cap sync android
 # Eigene Activity verarbeitet App Links auch bei bereits laufender App.
 cp scripts/MainActivity.java android/app/src/main/java/cloud/einsatzleiter/app/MainActivity.java
 
+# App-local Java plugin: no npm package; registered explicitly in MainActivity.
+grep -q "include ':native-files'" android/settings.gradle || cat >> android/settings.gradle <<'GRADLE'
+
+include ':native-files'
+project(':native-files').projectDir = new File('../plugins/native-files/android')
+GRADLE
+grep -q "project(':native-files')" android/app/build.gradle || \
+  sed -i "s|^dependencies {|dependencies {\n    implementation project(':native-files')|" android/app/build.gradle
+
 # Pull-to-Refresh (MainActivity nutzt SwipeRefreshLayout)
 grep -q "androidx.swiperefreshlayout" android/app/build.gradle || \
   sed -i "s|^dependencies {|dependencies {\n    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'|" android/app/build.gradle
