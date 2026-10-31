@@ -102,11 +102,18 @@ class AlarmChannelPlugin : Plugin() {
     }
 
     @PluginMethod
-    fun sendServerTestAlarm(call: PluginCall) {
+    fun sendServerTestAlarm(call: PluginCall) = sendServerTest(call, isPush = false)
+
+    @PluginMethod
+    fun sendServerTestPush(call: PluginCall) = sendServerTest(call, isPush = true)
+
+    private fun sendServerTest(call: PluginCall, isPush: Boolean) {
+        val sendTest = if (isPush) FcmTokenRegistration::sendTestPush else FcmTokenRegistration::sendTestAlarm
+        val failureMessage = if (isPush) "Server-Test-Push fehlgeschlagen" else "Server-Testalarm fehlgeschlagen"
         fun resolveError(message: String) {
             call.resolve(JSObject().apply {
                 put("ok", false)
-                put("nativeAlarm", false)
+                if (!isPush) put("nativeAlarm", false)
                 put("error", message)
             })
         }
@@ -114,14 +121,14 @@ class AlarmChannelPlugin : Plugin() {
             FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
                 FcmTokenRegistration.post(context, token) { registration ->
                     registration.fold(onSuccess = {
-                        FcmTokenRegistration.sendTestAlarm(context, token) { result ->
+                        sendTest(context, token) { result ->
                             result.fold(onSuccess = { json ->
                                 call.resolve(JSObject().apply {
                                     put("ok", json.optBoolean("ok", true))
-                                    put("nativeAlarm", json.optBoolean("native_alarm", json.optBoolean("nativeAlarm", false)))
+                                    if (!isPush) put("nativeAlarm", json.optBoolean("native_alarm", json.optBoolean("nativeAlarm", false)))
                                     put("error", json.optString("error", ""))
                                 })
-                            }, onFailure = { error -> resolveError(error.message ?: "Server-Testalarm fehlgeschlagen") })
+                            }, onFailure = { error -> resolveError(error.message ?: failureMessage) })
                         }
                     }, onFailure = { error ->
                         resolveError("Push-Registrierung fehlgeschlagen: ${error.message ?: "unbekannter Fehler"}")

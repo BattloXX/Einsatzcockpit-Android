@@ -65,7 +65,12 @@
     .alarm-checklist li::before { content:"";width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0; }
     .alarm-checklist li.ready { color:var(--green); }
     .alarm-checklist li > span { flex:1;min-width:0; }
-    #pushStatusBadge { font-size:.72rem;overflow-wrap:anywhere; }
+    .alarm-push { margin-top:16px;padding-top:14px;border-top:1px solid var(--line2); }
+    .alarm-push .alarm-checklist { margin-top:0; }
+    #alarmPushRow { flex-wrap:wrap; }
+    #alarmPushRow > span { flex-basis:120px; }
+    #pushStatusBadge { display:block;font-size:.72rem;overflow-wrap:anywhere; }
+    #btnPushServerTest { width:100%;margin-top:10px; }
     .alarm-checklist button[hidden] { display:none; }
     .alarm-checklist button { font-size:.72rem;padding:6px 8px;flex-shrink:0; }
     .alarm-volume { margin-top:12px;font-size:.85rem; }
@@ -153,24 +158,31 @@
     <p id="alarmSetupHint" class="alarm-warning" style="display:none;">Alarm ist nicht vollständig eingerichtet – siehe rote Punkte</p>
     <label class="toggle-row"><span>Alarmton auch bei Lautlos/Vibration (Vollbild)</span><span class="toggle"><input type="checkbox" id="alarmEnabledToggle" onchange="setAlarmEnabled(this.checked)"><span class="toggle-slider"></span></span></label>
     <label class="toggle-row"><span>Auch bei „Nicht stören“</span><span class="toggle"><input type="checkbox" id="alarmDndToggle" onchange="configureAlarmDnd(this.checked)"><span class="toggle-slider"></span></span></label>
+    <section class="alarm-push" aria-labelledby="pushHeading">
+      <h2 class="card-label" id="pushHeading">Push-Benachrichtigungen</h2>
+      <p class="alarm-note">Normale Meldungen (Einsatzinfos, Nachrichten) kommen als Push-Benachrichtigung.</p>
+      <ul class="alarm-checklist" aria-label="Push-Einrichtung">
+        <!-- Push-Benachrichtigungen: hier statt auf /admin/push-nachrichten, weil die
+             Capacitor-Bridge auf DIESER lokalen Seite garantiert verfuegbar ist - auf
+             der remote nachgeladenen Admin-Seite ist sie das bekanntermassen nicht
+             zuverlaessig (siehe Backend main.py::session_middleware-Kommentar). -->
+        <li id="alarmPushRow"><span>Push beim Server eingerichtet <span id="pushStatusBadge">Prüfe…</span></span><button class="btn-ghost" id="btnRegisterPush" onclick="registerPushAndContinue()">Registrieren</button></li>
+      </ul>
+      <p id="pushSetupHint" style="display:none;font-size:.82rem;color:var(--muted);margin-top:10px;">
+        Tippe auf „Registrieren“, um dieses Gerät beim Server einzurichten.
+      </p>
+      <p id="pushDeliveryWarning" style="display:none;font-size:.82rem;color:var(--yellow);margin-top:10px;">
+        Der letzte Zustellversuch ist fehlgeschlagen.
+      </p>
+      <button class="btn-ghost" id="btnPushServerTest" onclick="sendServerTestPush()" disabled>Test-Push über Server</button>
+    </section>
     <ul class="alarm-checklist" aria-label="Alarm-Einrichtung">
-      <!-- Push-Benachrichtigungen: hier statt auf /admin/push-nachrichten, weil die
-           Capacitor-Bridge auf DIESER lokalen Seite garantiert verfuegbar ist - auf
-           der remote nachgeladenen Admin-Seite ist sie das bekanntermassen nicht
-           zuverlaessig (siehe Backend main.py::session_middleware-Kommentar). -->
-      <li id="alarmPushRow"><span>Push beim Server eingerichtet <span id="pushStatusBadge">Prüfe…</span></span><button class="btn-ghost" id="btnRegisterPush" onclick="registerPushAndContinue()">Registrieren</button></li>
       <li id="alarmNotificationsRow"><span>Benachrichtigungen erlaubt</span><button class="btn-ghost" onclick="requestAlarmNotifications()">Erlauben</button></li>
       <li id="alarmFullScreenRow"><span>Vollbild-Alarm erlaubt</span><button class="btn-ghost" onclick="openAlarmSetting('fullscreen')">Erlauben</button></li>
       <li id="alarmBatteryRow"><span>Akku-Optimierung aus</span><button class="btn-ghost" onclick="openAlarmSetting('battery')">Einrichten</button></li>
       <li id="alarmDndRow"><span>Nicht stören übergehen</span><button class="btn-ghost" onclick="configureAlarmDnd(true)">Einrichten</button></li>
       <li id="alarmVolumeRow"><span>Alarmlautstärke System: <span id="alarmSystemVolume">–</span></span><button class="btn-ghost" onclick="document.getElementById('alarmVolumeSlider').focus()">Anpassen</button></li>
     </ul>
-    <p id="pushSetupHint" style="display:none;font-size:.82rem;color:var(--muted);margin-top:10px;">
-      Tippe auf „Registrieren“, um dieses Gerät beim Server einzurichten.
-    </p>
-    <p id="pushDeliveryWarning" style="display:none;font-size:.82rem;color:var(--yellow);margin-top:10px;">
-      Der letzte Zustellversuch ist fehlgeschlagen.
-    </p>
     <div class="alarm-volume">
       <label for="alarmVolumeSlider">Alarmlautstärke: <span id="alarmVolumeLabel">80 %</span></label>
       <input type="range" id="alarmVolumeSlider" min="0" max="100" step="10" value="80" oninput="updateAlarmVolumeLabel()" onchange="saveAlarmVolume()">
@@ -448,6 +460,8 @@ async function clearObjectCache() {
 }
 
 // ── Alarmkanal ────────────────────────────────────────────────────────────────
+let pushServerTestRunning = false;
+
 async function updateAlarmStatus() {
   await updatePushStatusBadge();
   if (!AlarmChannel?.getStatus) return;
@@ -457,8 +471,12 @@ async function updateAlarmStatus() {
     const badge = document.getElementById('alarmStatusBadge');
     const enabled = document.getElementById('alarmEnabledToggle');
     const dnd = document.getElementById('alarmDndToggle');
+    // Normale Push-Meldungen haengen nicht am Alarmton-Schalter.
+    document.getElementById('btnPushServerTest').disabled =
+      !AlarmChannel?.sendServerTestPush || pushServerTestRunning;
     if (!status.supported) {
-      card.querySelectorAll('.toggle-row, .alarm-checklist, .alarm-volume, .alarm-actions').forEach((el) => el.style.display = 'none');
+      // Der Push-Abschnitt bleibt sichtbar, nur der native Alarm fehlt.
+      card.querySelectorAll(':scope > .toggle-row, :scope > .alarm-checklist, :scope > .alarm-volume, :scope > .alarm-actions').forEach((el) => el.style.display = 'none');
       document.getElementById('alarmUnsupported').style.display = '';
       badge.textContent = 'Nicht unterstützt';
       badge.className = 'badge-soft off';
@@ -608,6 +626,23 @@ async function sendServerTestAlarm() {
     await updatePushStatusBadge();
   } catch (error) {
     toast(error?.message || 'Server-Testalarm fehlgeschlagen.');
+  }
+}
+
+async function sendServerTestPush() {
+  const button = document.getElementById('btnPushServerTest');
+  if (button.disabled || !AlarmChannel?.sendServerTestPush) return;
+  pushServerTestRunning = true;
+  button.disabled = true;
+  try {
+    const result = await AlarmChannel.sendServerTestPush();
+    toast(result.ok ? 'Test-Push gesendet – kommt in wenigen Sekunden'
+      : (result.error || 'Server-Test-Push fehlgeschlagen.'), 5000);
+  } catch (error) {
+    toast(error?.message || 'Server-Test-Push fehlgeschlagen.');
+  } finally {
+    pushServerTestRunning = false;
+    await updateAlarmStatus();
   }
 }
 
