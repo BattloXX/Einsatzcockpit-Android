@@ -20,6 +20,11 @@ import com.google.firebase.messaging.FirebaseMessaging
 /** Capacitor-Plugin fuer den akustischen Einsatzalarm-Notification-Channel. */
 @CapacitorPlugin(name = "AlarmChannel")
 class AlarmChannelPlugin : Plugin() {
+    override fun load() {
+        super.load()
+        FcmTokenRegistration.ensureCapabilitiesRegistered(context, "app_start")
+    }
+
     private val notificationManager: NotificationManager
         get() = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 

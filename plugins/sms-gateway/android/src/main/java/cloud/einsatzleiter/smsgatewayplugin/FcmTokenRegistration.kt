@@ -2,6 +2,7 @@ package cloud.einsatzleiter.smsgatewayplugin
 
 import android.content.Context
 import android.webkit.CookieManager
+import com.google.firebase.messaging.FirebaseMessaging
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -25,6 +26,31 @@ object FcmTokenRegistration {
         .readTimeout(10, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)
         .build()
+
+    fun ensureCapabilitiesRegistered(context: Context, reason: String) {
+        fun logFailure(error: Throwable) {
+            runCatching { SmsGatewayService.log("FCM-Faehigkeiten nicht registriert ($reason): ${error.message}") }
+        }
+        runCatching {
+            val appContext = context.applicationContext
+            val prefs = appContext.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
+            val version = installedAppVersion(appContext) ?: error("App-Version nicht verfuegbar")
+            val capabilitiesVersion = "$version:native_alarm"
+            if (prefs.getString("ec_fcm_caps_registered", null) == capabilitiesVersion) return
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                runCatching {
+                    post(appContext, token) { result ->
+                        result.fold(onSuccess = {
+                            runCatching {
+                                prefs.edit().putString("ec_fcm_caps_registered", capabilitiesVersion).apply()
+                                SmsGatewayService.log("FCM-Faehigkeiten registriert ($reason)")
+                            }.onFailure { logFailure(it) }
+                        }, onFailure = { logFailure(it) })
+                    }
+                }.onFailure { logFailure(it) }
+            }.addOnFailureListener { logFailure(it) }
+        }.onFailure { logFailure(it) }
+    }
 
     fun post(context: Context, token: String, callback: (Result<Unit>) -> Unit) {
         try {
