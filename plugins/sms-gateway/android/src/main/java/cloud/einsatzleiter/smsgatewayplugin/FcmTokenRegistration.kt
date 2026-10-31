@@ -34,13 +34,16 @@ object FcmTokenRegistration {
         runCatching {
             val appContext = context.applicationContext
             val prefs = appContext.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
-            val version = installedAppVersion(appContext) ?: error("App-Version nicht verfuegbar")
-            val capabilitiesVersion = "$version:native_alarm"
+            val capabilitiesVersion = capabilitiesRegistrationValue(appContext)
             if (prefs.getString("ec_fcm_caps_registered", null) == capabilitiesVersion) return
             FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
                 runCatching {
                     post(appContext, token) { result ->
-                        result.fold(onSuccess = {
+                        result.fold(onSuccess = { nativeAlarm ->
+                            if (!nativeAlarm) {
+                                runCatching { SmsGatewayService.log("FCM-Faehigkeiten vom Server nicht bestaetigt ($reason)") }
+                                return@fold
+                            }
                             runCatching {
                                 prefs.edit().putString("ec_fcm_caps_registered", capabilitiesVersion).apply()
                                 SmsGatewayService.log("FCM-Faehigkeiten registriert ($reason)")
@@ -52,7 +55,19 @@ object FcmTokenRegistration {
         }.onFailure { logFailure(it) }
     }
 
-    fun post(context: Context, token: String, callback: (Result<Unit>) -> Unit) {
+    fun capabilitiesRegistrationValue(context: Context): String {
+        val version = installedAppVersion(context) ?: error("App-Version nicht verfuegbar")
+        return "$version:native_alarm:v2"
+    }
+
+    fun confirmsNativeAlarm(body: String): Boolean {
+        return runCatching {
+            val capabilities = JSONObject(body).optJSONArray("capabilities") ?: return false
+            (0 until capabilities.length()).any { capabilities.optString(it) == "native_alarm" }
+        }.getOrDefault(false)
+    }
+
+    fun post(context: Context, token: String, callback: (Result<Boolean>) -> Unit) {
         try {
             val prefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
             val baseUrl = prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null)?.trimEnd('/')
@@ -88,11 +103,14 @@ object FcmTokenRegistration {
                 override fun onFailure(call: Call, e: IOException) = callback(Result.failure(e))
 
                 override fun onResponse(call: Call, response: Response) {
-                    response.use {
-                        DeviceAccessState.finalCode(it)?.let { code -> DeviceAccessState.markInvalid(context, code) }
-                        if (it.isSuccessful) callback(Result.success(Unit))
-                        else callback(Result.failure(IOException("Server antwortet mit HTTP ${it.code}")))
+                    val result = runCatching {
+                        response.use {
+                            DeviceAccessState.finalCode(it)?.let { code -> DeviceAccessState.markInvalid(context, code) }
+                            if (!it.isSuccessful) throw IOException("Server antwortet mit HTTP ${it.code}")
+                            confirmsNativeAlarm(it.body?.string().orEmpty())
+                        }
                     }
+                    callback(result)
                 }
             })
         } catch (e: Exception) {
