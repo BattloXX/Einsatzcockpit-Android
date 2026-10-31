@@ -53,6 +53,11 @@ class KontaktSyncEngine(
                 "Kontakte aktualisiert: $contactCount/$contactCount Kontakte offline verfügbar",
             )
             true
+        } catch (error: NoPermissionException) {
+            // Kein Kontaktrecht (z.B. Geraete-Login/Rolle): Bestand verwerfen, kein Retry
+            wipeDatabase(db)
+            OfflineCacheStatusStore.logActivity(appContext, "Kontakt-Sync beendet: keine Berechtigung für das Kontaktverzeichnis")
+            true
         } catch (error: AccessInvalidException) {
             DeviceAccessState.markInvalid(appContext, error.code)
             OfflineCacheStatusStore.logActivity(appContext, "Kontakt-Sync beendet: Gerätezugang ungültig")
@@ -200,6 +205,7 @@ class KontaktSyncEngine(
         }
         httpClient.newCall(request).execute().use { response ->
             DeviceAccessState.finalCode(response)?.let { throw AccessInvalidException(it) }
+            if (response.code == 403) throw NoPermissionException()
             val body = response.body?.string()
             if (!response.isSuccessful || body == null) {
                 throw SyncException("Sync-Serverfehler HTTP ${response.code}")
@@ -281,9 +287,11 @@ class KontaktSyncEngine(
             when (entity to operation) {
                 "kontakt" to "upsert" -> add(Change.KontaktUpsert(parseKontakt(json.getJSONObject("payload"))))
                 "zuordnung" to "upsert" -> add(Change.ZuordnungUpsert(parseZuordnung(json.getJSONObject("payload"))))
-                "kontakt" to "tombstone" -> add(Change.KontaktTombstone(id))
-                "zuordnung" to "tombstone" -> add(Change.ZuordnungTombstone(id))
-                else -> throw SyncException("Unbekannte Kontakt-Änderung: $entity/$operation")
+                // "delete" schrieb das Backend (Objektpflege) bis zur Korrektur statt "tombstone"
+                "kontakt" to "tombstone", "kontakt" to "delete" -> add(Change.KontaktTombstone(id))
+                "zuordnung" to "tombstone", "zuordnung" to "delete" -> add(Change.ZuordnungTombstone(id))
+                // Unbekannte Aenderungen duerfen den Cursor nie dauerhaft blockieren
+                else -> Unit
             }
         }
     }
@@ -321,6 +329,9 @@ class KontaktSyncEngine(
     }
 
     private class SyncException(message: String, cause: Throwable? = null) : IOException(message, cause)
+
+    /** HTTP 403: Login darf das Kontaktverzeichnis nicht lesen. */
+    private class NoPermissionException : IOException("Keine Berechtigung für das Kontaktverzeichnis")
 
     /** Server meldet endgueltig ungueltigen Geraetezugang (kein temporaerer Fehler). */
     private class AccessInvalidException(val code: String) : IOException("Gerätezugang ungültig ($code)")
