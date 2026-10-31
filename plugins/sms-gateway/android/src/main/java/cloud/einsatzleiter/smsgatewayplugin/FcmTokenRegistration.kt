@@ -118,7 +118,13 @@ object FcmTokenRegistration {
         }
     }
 
-    fun sendTestAlarm(context: Context, token: String, callback: (Result<JSONObject>) -> Unit) {
+    fun sendTestAlarm(context: Context, token: String, callback: (Result<JSONObject>) -> Unit) =
+        sendTest(context, token, "/api/v1/device/fcm-test-alarm", callback)
+
+    fun sendTestPush(context: Context, token: String, callback: (Result<JSONObject>) -> Unit) =
+        sendTest(context, token, "/api/v1/device/fcm-test-push", callback)
+
+    private fun sendTest(context: Context, token: String, path: String, callback: (Result<JSONObject>) -> Unit) {
         try {
             val prefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
             val baseUrl = prefs.getString(EinsatzLivePoller.PREF_BASE_URL, null)?.trimEnd('/')
@@ -140,7 +146,7 @@ object FcmTokenRegistration {
             val body = JSONObject().put("token", token).toString()
                 .toRequestBody("application/json".toMediaType())
             val request = DeviceAccessState.withDeviceHeaders(
-                Request.Builder().url("$baseUrl/api/v1/device/fcm-test-alarm"),
+                Request.Builder().url("$baseUrl$path"),
             ).header(authHeader.first, authHeader.second).post(body).build()
             httpClient.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) = callback(Result.failure(e))
@@ -150,8 +156,17 @@ object FcmTokenRegistration {
                         response.use {
                             DeviceAccessState.finalCode(it)?.let { code -> DeviceAccessState.markInvalid(context, code) }
                             if (it.code == 429) throw IOException("Bitte 20 Sekunden warten")
+                            val responseBody = it.body?.string().orEmpty()
+                            if (it.code == 404 && path == "/api/v1/device/fcm-test-push") {
+                                val detail = runCatching { JSONObject(responseBody).optString("detail") }.getOrDefault("")
+                                throw IOException(if (detail == "Token nicht gefunden") {
+                                    "Gerät nicht registriert – bitte Registrieren tippen"
+                                } else {
+                                    "Server kennt den Test-Push noch nicht – bitte Server aktualisieren"
+                                })
+                            }
                             if (!it.isSuccessful) throw IOException("Server antwortet mit HTTP ${it.code}")
-                            JSONObject(it.body?.string().orEmpty())
+                            JSONObject(responseBody)
                         }
                     }
                     callback(result)
