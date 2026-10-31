@@ -155,6 +155,11 @@ class AutoUpdateWorker(
         }
 
         val apk = File(applicationContext.cacheDir, "einsatzcockpit-autoupdate-$version.apk")
+        applicationContext.cacheDir.listFiles()?.forEach { cached ->
+            if (cached.name.startsWith("einsatzcockpit-autoupdate-") && cached.name.endsWith(".apk") && cached != apk) {
+                cached.delete()
+            }
+        }
         try {
             download(downloadUrl, apk)
             AutoUpdateStatusStore.download(applicationContext, "APK v$version heruntergeladen")
@@ -167,7 +172,7 @@ class AutoUpdateWorker(
         if (isSafetyCritical()) {
             AutoUpdateStatusStore.install(
                 applicationContext,
-                "Installation verschoben: Live-Einsatz oder Gateway-Wiederverbindung aktiv",
+                "Installation verschoben: Live-Einsatz, Alarm, SMS-Versand oder Gateway-Wiederverbindung aktiv",
             )
             return Result.retry()
         }
@@ -232,7 +237,17 @@ class AutoUpdateWorker(
     private fun isSafetyCritical(): Boolean {
         val prefs = preferences(applicationContext)
         val activeIncident = !prefs.getString(EinsatzLivePoller.PREF_INCIDENT_ID, null).isNullOrBlank()
-        return activeIncident || SmsGatewayService.connectingSince > 0L
+        if (activeIncident || SmsGatewayService.connectingSince > 0L || EinsatzAlarmService.isActive) return true
+        return try {
+            val journal = SmsDispatchJournal(applicationContext, { "" })
+            try {
+                journal.hasAttempting()
+            } finally {
+                journal.close()
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun install(apk: File, version: String) {

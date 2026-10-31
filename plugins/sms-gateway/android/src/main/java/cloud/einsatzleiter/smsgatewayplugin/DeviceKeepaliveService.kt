@@ -50,6 +50,7 @@ class DeviceKeepaliveService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_LIVE_REFRESH) {
+            // Vor start(): Der Poller kann synchron onIdleTimeout() und stopSelf() auslösen.
             startForegroundCompat()
             acquireWakeLock()
             livePoller?.start()
@@ -62,6 +63,7 @@ class DeviceKeepaliveService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        // Auch beim Default-Start zuerst die Foreground-Service-Frist erfüllen.
         startForegroundCompat()
         acquireWakeLock()
         livePoller?.start()

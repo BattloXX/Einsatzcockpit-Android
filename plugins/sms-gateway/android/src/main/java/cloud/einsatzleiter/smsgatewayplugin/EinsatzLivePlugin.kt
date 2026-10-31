@@ -2,6 +2,7 @@ package cloud.einsatzleiter.smsgatewayplugin
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -55,7 +56,7 @@ class EinsatzLivePlugin : Plugin() {
 
     private fun sendServiceAction(action: String) {
         val intent = Intent(context, DeviceKeepaliveService::class.java).apply { this.action = action }
-        if (action == DeviceKeepaliveService.ACTION_START) context.startForegroundService(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && action != DeviceKeepaliveService.ACTION_STOP) context.startForegroundService(intent)
         else context.startService(intent)
     }
 
