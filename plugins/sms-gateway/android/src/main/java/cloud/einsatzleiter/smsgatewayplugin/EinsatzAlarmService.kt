@@ -96,22 +96,18 @@ class EinsatzAlarmService : Service() {
                     SmsGatewayService.log("Alarm: Systemlautstaerke darf nicht geaendert werden")
                 }
             }
-            // Vor prepare() speichern, damit auch bei einem Fehler release() erreicht wird.
-            val media = MediaPlayer()
-            player = media
-            media.apply {
-                setAudioAttributes(audioAttributes)
-                resources.openRawResourceFd(R.raw.einsatz_alarm).use { file ->
-                    setDataSource(file.fileDescriptor, file.startOffset, file.length)
-                }
-                isLooping = true
-                setOnErrorListener { _, what, extra ->
-                    SmsGatewayService.log("Alarm: Wiedergabefehler $what/$extra")
-                    stopAlarm(acknowledged = false)
-                    true
-                }
-                prepare()
-                start()
+            val tone = AlarmTone.normalize(intent.getStringExtra(EXTRA_TONE)
+                ?: getSharedPreferences("CapacitorStorage", MODE_PRIVATE).getString(AlarmTone.PREF_KEY, null))
+            SmsGatewayService.log("Alarm: Ton $tone")
+            try {
+                startTone(tone)
+            } catch (e: Exception) {
+                if (tone == AlarmTone.DEFAULT) throw e
+                SmsGatewayService.log("Alarm: Ton $tone konnte nicht geladen werden -> Standard-Alarm (${e.javaClass.simpleName})")
+                player?.release()
+                player = null
+                SmsGatewayService.log("Alarm: Ton ${AlarmTone.DEFAULT}")
+                startTone(AlarmTone.DEFAULT)
             }
             startVibration()
             SmsGatewayService.log("Alarm: Ton und Vibration gestartet")
@@ -125,6 +121,26 @@ class EinsatzAlarmService : Service() {
             stopAlarm(acknowledged = false)
         }, if (previewSeconds > 0) previewSeconds * 1000L else 60_000L)
         return START_NOT_STICKY
+    }
+
+    private fun startTone(tone: String) {
+        // Vor prepare() speichern, damit auch bei einem Fehler release() erreicht wird.
+        val media = MediaPlayer()
+        player = media
+        media.apply {
+            setAudioAttributes(audioAttributes)
+            resources.openRawResourceFd(rawRes(tone)).use { file ->
+                setDataSource(file.fileDescriptor, file.startOffset, file.length)
+            }
+            isLooping = true
+            setOnErrorListener { _, what, extra ->
+                SmsGatewayService.log("Alarm: Wiedergabefehler $what/$extra")
+                stopAlarm(acknowledged = false)
+                true
+            }
+            prepare()
+            start()
+        }
     }
 
     private fun requestFocus() {
@@ -241,6 +257,7 @@ class EinsatzAlarmService : Service() {
         const val EXTRA_IS_TEST = "isTest"
         const val EXTRA_PREVIEW_SECONDS = "previewSeconds"
         const val EXTRA_VOLUME_PERCENT = "percent"
+        const val EXTRA_TONE = "tone"
         const val EXTRA_STARTED_AT = "startedAt"
 
         fun start(
@@ -252,6 +269,7 @@ class EinsatzAlarmService : Service() {
             isTest: Boolean = false,
             previewSeconds: Int = 0,
             percent: Int? = null,
+            tone: String? = null,
         ): Boolean {
             val intent = Intent(context, EinsatzAlarmService::class.java).apply {
                 action = ACTION_START
@@ -263,6 +281,7 @@ class EinsatzAlarmService : Service() {
                 putExtra(EXTRA_STARTED_AT, SystemClock.elapsedRealtime())
                 putExtra(EXTRA_PREVIEW_SECONDS, previewSeconds.coerceIn(0, 60))
                 percent?.let { putExtra(EXTRA_VOLUME_PERCENT, it.coerceIn(0, 100)) }
+                tone?.let { putExtra(EXTRA_TONE, it) }
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)

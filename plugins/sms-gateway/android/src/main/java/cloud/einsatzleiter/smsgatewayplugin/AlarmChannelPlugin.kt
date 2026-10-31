@@ -84,13 +84,14 @@ class AlarmChannelPlugin : Plugin() {
     @PluginMethod
     fun previewVolume(call: PluginCall) {
         val percent = call.getInt("percent") ?: return call.reject("percent erforderlich")
+        val tone = call.getString("tone")
         if (percent !in 0..100) {
             call.reject("percent muss zwischen 0 und 100 liegen")
             return
         }
         val started = EinsatzAlarmService.start(
             context, title = "Vorschau Alarmlautstärke", body = "Vorschau Alarmlautstärke", url = "/",
-            isTest = true, previewSeconds = 3, percent = percent,
+            isTest = true, previewSeconds = if (tone != null) 5 else 3, percent = percent, tone = tone,
         )
         call.resolve(JSObject().apply { put("started", started) })
     }
