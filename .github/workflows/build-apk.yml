@@ -148,6 +148,19 @@ jobs:
             cp app/build/outputs/apk/debug/app-debug.apk ci-artifacts/app-debug-autoupdate.apk
           fi
 
+      - name: Nur ein FCM-Empfaenger im Manifest
+        working-directory: android
+        run: |
+          # Zwei MESSAGING_EVENT-Services -> Firebase stellt nur an den ersten zu;
+          # dann erreichen nativer Alarm und Zustellbestaetigung die App nie.
+          AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          for apk in ci-artifacts/*.apk; do
+            if "$AAPT2" dump xmltree --file AndroidManifest.xml "$apk" | grep -q "com.capacitorjs.plugins.pushnotifications.MessagingService"; then
+              echo "::error::$apk enthaelt Capacitors MessagingService - FCM-Nachrichten erreichen EinsatzFirebaseMessagingService nicht"
+              exit 1
+            fi
+          done
+
       - name: Sign Release APKs
         if: ${{ env.HAS_KEYSTORE == 'true' }}
         env:
