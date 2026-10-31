@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -46,11 +47,38 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         if (rawUrl != null && isIncidentPush) {
             EinsatzPreloadWorker.enqueue(this, absoluteUrl(rawUrl))
         }
+        val isNativeAlarm = data["alarm"] == "1"
         val isAlarm = data["channel_id"] == "einsatz_alarm"
         val isSilentWake = data["silent"] == "1"
         data["delivery_id"]?.takeIf { it.isNotBlank() }?.let { sendPushAck(it) }
 
-        if (isSilentWake) {
+        if (isNativeAlarm) {
+            if (data["is_exercise"] == "1" || !alarmChannelWanted()) {
+                SmsGatewayService.log("Alarm: normale Meldung (Uebung oder Alarm deaktiviert)")
+                postGenericNotification(
+                    data["title"].orEmpty(), data["body"].orEmpty(), data["url"].orEmpty(),
+                    ALARM_FALLBACK_NOTIFICATION_ID,
+                )
+            } else {
+                val prefs = getSharedPreferences("CapacitorStorage", MODE_PRIVATE)
+                val incidentId = data["incident_id"]?.toLongOrNull() ?: 0L
+                val isTest = data["test"] == "1"
+                val decision = AlarmDedupe.check(
+                    prefs.getString(AlarmDedupe.PREF_KEY, "").orEmpty(),
+                    incidentId, System.currentTimeMillis(), isTest,
+                )
+                prefs.edit().putString(AlarmDedupe.PREF_KEY, decision.seen).apply()
+                if (decision.shouldAlarm) {
+                    SmsGatewayService.log("FCM empfangen: nativer Alarm")
+                    EinsatzAlarmService.start(
+                        this, incidentId, data["title"].orEmpty(), data["body"].orEmpty(),
+                        data["url"].orEmpty(), isTest,
+                    )
+                } else {
+                    SmsGatewayService.log("Alarm: Duplikat fuer Einsatz $incidentId uebersprungen")
+                }
+            }
+        } else if (isSilentWake) {
             SmsGatewayService.log("FCM empfangen: silent (Poller + Ack, keine eigene Anzeige)")
         } else if (isAlarm) {
             SmsGatewayService.log("FCM empfangen: display (Alarm-Fallback)")
@@ -69,7 +97,8 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
             action = DeviceKeepaliveService.ACTION_LIVE_REFRESH
         }
         try {
-            startForegroundService(refresh)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(refresh)
+            else startService(refresh)
         } catch (e: SecurityException) {
             SmsGatewayService.log("Live-Aktualisierung nach FCM nicht startbar: ${e.javaClass.simpleName}")
         } catch (e: IllegalStateException) {
@@ -81,7 +110,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         // Einsatzalarme werden nach dem sofortigen Poll als konsistente
         // "Laufender Einsatz"-Notification dargestellt. Andere Meldungen
         // brauchen weiterhin eine eigene, antippbare Systembenachrichtigung.
-        if (!isSilentWake && !isAlarm) {
+        if (!isNativeAlarm && !isSilentWake && !isAlarm) {
             postGenericNotification(
                 data["title"].orEmpty(),
                 data["body"].orEmpty(),
@@ -149,7 +178,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         val manager = getSystemService(NotificationManager::class.java)
         if (channelId == AlarmNotificationChannel.CHANNEL_ID) {
             AlarmNotificationChannel.create(this)
-        } else {
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(NotificationChannel(
                 GENERIC_CHANNEL_ID,
                 "Einsatzcockpit-Meldungen",

@@ -74,6 +74,11 @@ PERMISSIONS = [
     # specialUse statt dataSync: dataSync hat unter Android 15 ein
     # ~6h/24h-Laufzeitlimit, das den 24/7-Gateway-Betrieb beendet.
     "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+    # Native Sirene und Vollbildalarm
+    "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+    "android.permission.USE_FULL_SCREEN_INTENT",
+    "android.permission.VIBRATE",
+    "android.permission.MODIFY_AUDIO_SETTINGS",
     "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
     # Benachrichtigungen für Foreground-Service (Android 13+)
     "android.permission.POST_NOTIFICATIONS",

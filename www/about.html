@@ -57,6 +57,21 @@
       color: var(--faint); margin-bottom: 10px;
     }
 
+    .card-alarm { border-color:var(--red); border-left:4px solid var(--red); }
+    .alarm-heading { display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap; }
+    .alarm-warning { color:var(--red);font-size:.82rem;line-height:1.4; }
+    .alarm-checklist { list-style:none;margin-top:14px; }
+    .alarm-checklist li { display:flex;align-items:center;gap:8px;padding:8px 0;font-size:.82rem;color:var(--red); }
+    .alarm-checklist li::before { content:"";width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0; }
+    .alarm-checklist li.ready { color:var(--green); }
+    .alarm-checklist li > span { flex:1;min-width:0; }
+    .alarm-checklist button[hidden] { display:none; }
+    .alarm-checklist button { font-size:.72rem;padding:6px 8px;flex-shrink:0; }
+    .alarm-volume { margin-top:12px;font-size:.85rem; }
+    .alarm-volume input { display:block;width:100%;margin:12px 0; }
+    .alarm-note { color:var(--muted);font-size:.78rem;line-height:1.45;margin-top:10px; }
+    .alarm-actions { display:flex;flex-direction:column;gap:10px;margin-top:14px; }
+
     /* ── Buttons ─────────────────────────────────────────────────────────── */
     button, a.btn {
       border: none; border-radius: 8px; cursor: pointer; font-family: var(--sans);
@@ -111,10 +126,10 @@
     /* ── Toast ───────────────────────────────────────────────────────────── */
     #toast {
       position: fixed; bottom: 24px; left: 50%;
-      transform: translateX(-50%) translateY(80px);
+      transform: translateX(-50%) translateY(calc(100% + 24px));
       background: var(--s-hi); border: 1px solid var(--border); border-radius: 999px;
       padding: 9px 20px; font-size: .85rem; transition: transform .25s ease;
-      pointer-events: none; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.4);
+      pointer-events: none; width:max-content; max-width:calc(100vw - 32px); overflow-wrap:anywhere; text-align:center; box-shadow: 0 8px 24px rgba(0,0,0,.4);
     }
     #toast.show { transform: translateX(-50%) translateY(0); }
   </style>
@@ -127,6 +142,35 @@
       <div class="header-title">Über die App</div>
       <div class="header-sub">Einsatzcockpit Android</div>
     </div>
+  </div>
+
+  <div class="card card-alarm" id="alarmCard">
+    <div class="card-label alarm-heading">
+      <span>🚨 Einsatzalarm</span>
+      <span class="badge-soft" id="alarmStatusBadge">Prüfe…</span>
+    </div>
+    <p id="alarmSetupHint" class="alarm-warning" style="display:none;">Alarm ist nicht vollständig eingerichtet – siehe rote Punkte</p>
+    <label class="toggle-row"><span>Alarmton auch bei Lautlos/Vibration (Vollbild)</span><span class="toggle"><input type="checkbox" id="alarmEnabledToggle" onchange="setAlarmEnabled(this.checked)"><span class="toggle-slider"></span></span></label>
+    <label class="toggle-row"><span>Auch bei „Nicht stören“</span><span class="toggle"><input type="checkbox" id="alarmDndToggle" onchange="configureAlarmDnd(this.checked)"><span class="toggle-slider"></span></span></label>
+    <ul class="alarm-checklist" aria-label="Alarm-Einrichtung">
+      <li id="alarmNotificationsRow"><span>Benachrichtigungen erlaubt</span><button class="btn-ghost" onclick="requestAlarmNotifications()">Erlauben</button></li>
+      <li id="alarmFullScreenRow"><span>Vollbild-Alarm erlaubt</span><button class="btn-ghost" onclick="openAlarmSetting('fullscreen')">Erlauben</button></li>
+      <li id="alarmBatteryRow"><span>Akku-Optimierung aus</span><button class="btn-ghost" onclick="openAlarmSetting('battery')">Einrichten</button></li>
+      <li id="alarmDndRow"><span>Nicht stören übergehen</span><button class="btn-ghost" onclick="configureAlarmDnd(true)">Einrichten</button></li>
+      <li id="alarmVolumeRow"><span>Alarmlautstärke System: <span id="alarmSystemVolume">–</span></span><button class="btn-ghost" onclick="document.getElementById('alarmVolumeSlider').focus()">Anpassen</button></li>
+    </ul>
+    <div class="alarm-volume">
+      <label for="alarmVolumeSlider">Alarmlautstärke: <span id="alarmVolumeLabel">80 %</span></label>
+      <input type="range" id="alarmVolumeSlider" min="0" max="100" step="10" value="80" oninput="updateAlarmVolumeLabel()" onchange="saveAlarmVolume()">
+      <button class="btn-ghost" id="btnAlarmPreview" onclick="previewAlarmVolume()" disabled>▶ Vorschau</button>
+      <p class="alarm-note">Die Alarmlautstärke wird während des Alarms auf diesen Wert gesetzt und danach zurückgestellt.</p>
+    </div>
+    <div class="alarm-actions">
+      <button class="btn-primary" id="btnAlarmTest" onclick="playAlarmTest()" disabled>▶ Testalarm lokal</button>
+      <button class="btn-ghost" id="btnAlarmServerTest" onclick="sendServerTestAlarm()" disabled>📡 Testalarm über Server</button>
+    </div>
+    <p class="alarm-note">Übungsalarme kommen als normale Benachrichtigung ohne Sirene.</p>
+    <p id="alarmUnsupported" style="display:none;font-size:.82rem;color:var(--muted);margin-top:10px;">Diese Funktion wird erst ab Android 8 unterstützt.</p>
   </div>
 
   <!-- App-Version / Update -->
@@ -232,20 +276,6 @@
         🔔 Push jetzt registrieren
       </button>
     </div>
-  </div>
-
-  <div class="card" id="alarmCard">
-    <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
-      <span>🔊 Alarmton bei Lautlos</span>
-      <span class="badge-soft" id="alarmStatusBadge">Prüfe…</span>
-    </div>
-    <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
-      Neue Einsätze werden auch dann hörbar gemeldet, wenn das Gerät auf Vibration oder lautlos gestellt ist.
-    </p>
-    <label class="toggle-row"><span>Ton bei Lautlos/Vibration</span><span class="toggle"><input type="checkbox" id="alarmEnabledToggle" onchange="setAlarmEnabled(this.checked)"><span class="toggle-slider"></span></span></label>
-    <label class="toggle-row"><span>Auch bei „Nicht stören“</span><span class="toggle"><input type="checkbox" id="alarmDndToggle" onchange="configureAlarmDnd(this.checked)"><span class="toggle-slider"></span></span></label>
-    <div style="margin-top:14px;"><button class="btn-primary" style="width:100%;" id="btnAlarmTest" onclick="playAlarmTest()">▶ Testton abspielen</button></div>
-    <p id="alarmUnsupported" style="display:none;font-size:.82rem;color:var(--muted);margin-top:10px;">Diese Funktion wird erst ab Android 8 unterstützt.</p>
   </div>
 
   <!-- SMS-Gateway (nur sichtbar wenn dieses Geraet als Gateway konfiguriert ist) -->
@@ -442,16 +472,32 @@ async function updateAlarmStatus() {
     const enabled = document.getElementById('alarmEnabledToggle');
     const dnd = document.getElementById('alarmDndToggle');
     if (!status.supported) {
-      card.querySelectorAll('.toggle-row, button').forEach((el) => el.style.display = 'none');
+      card.querySelectorAll('.toggle-row, .alarm-checklist, .alarm-volume, .alarm-actions').forEach((el) => el.style.display = 'none');
       document.getElementById('alarmUnsupported').style.display = '';
       badge.textContent = 'Nicht unterstützt';
       badge.className = 'badge-soft off';
       return;
     }
     enabled.checked = status.enabled;
-    dnd.checked = status.dndBypass;
+    dnd.checked = status.nativeChannelDndBypass || status.dndBypass;
     dnd.disabled = !status.enabled;
-    document.getElementById('btnAlarmTest').disabled = !status.enabled;
+    ['btnAlarmTest', 'btnAlarmServerTest', 'btnAlarmPreview'].forEach((id) => {
+      document.getElementById(id).disabled = !status.enabled;
+    });
+    const { value } = await Preferences.get({ key: 'el_alarm_volume_percent' });
+    const volumeSetting = value ?? '80';
+    document.getElementById('alarmVolumeSlider').value = volumeSetting;
+    updateAlarmVolumeLabel();
+    const volumeReady = status.alarmVolume > 0 || volumeSetting !== '0';
+    setAlarmCheck('alarmNotificationsRow', status.notificationsGranted);
+    setAlarmCheck('alarmFullScreenRow', status.fullScreenIntentAllowed);
+    setAlarmCheck('alarmBatteryRow', status.batteryOptimizationIgnored);
+    setAlarmCheck('alarmDndRow', status.nativeChannelDndBypass || status.dndBypass);
+    setAlarmCheck('alarmVolumeRow', volumeReady);
+    document.getElementById('alarmSystemVolume').textContent = status.alarmVolume + ' %';
+    const ready = status.enabled && status.notificationsGranted && status.fullScreenIntentAllowed
+      && status.batteryOptimizationIgnored && volumeReady;
+    document.getElementById('alarmSetupHint').style.display = ready ? 'none' : '';
     if (!status.notificationsGranted) {
       badge.textContent = 'Benachrichtigungen nicht erlaubt';
       badge.className = 'badge-soft off';
@@ -491,10 +537,10 @@ async function configureAlarmDnd(enabled) {
     if (!status.enabled) { await updateAlarmStatus(); return; }
     if (enabled && !status.dndPermission) {
       alarmDndSetupPending = true;
-      toast('Bitte Einsatzcockpit den Zugriff auf „Nicht stören“ erlauben.');
+      toast('Bitte Einsatzcockpit den Zugriff auf "Nicht stören" erlauben.');
       await AlarmChannel.openDndAccessSettings();
     } else {
-      toast('Bitte „Nicht stören übergehen“ in den Kanaleinstellungen festlegen.');
+      toast('Bitte "Nicht stören übergehen" in den Kanaleinstellungen festlegen.');
       await AlarmChannel.openChannelSettings();
     }
   } catch (_) {
@@ -506,25 +552,94 @@ async function configureAlarmDnd(enabled) {
 
 async function playAlarmTest() {
   try {
-    await AlarmChannel.playTestNotification();
-    toast('Testalarm wurde abgespielt.');
+    const result = await AlarmChannel.playLocalAlarm();
+    toast(result.started ? 'Testalarm wurde gestartet.' : 'Testalarm konnte nicht gestartet werden.');
   } catch (_) {
     toast('Testalarm konnte nicht abgespielt werden.');
   }
 }
 
+function setAlarmCheck(id, ready) {
+  const row = document.getElementById(id);
+  row.classList.toggle('ready', !!ready);
+  row.querySelector('button').hidden = !!ready;
+}
+
+async function requestAlarmNotifications() {
+  try {
+    const perm = await window.Capacitor?.Plugins?.PushNotifications?.requestPermissions();
+    if (perm?.receive !== 'granted') toast('Benachrichtigungen müssen zuerst erlaubt werden.');
+  } catch (_) {
+    toast('Berechtigung konnte nicht angefragt werden.');
+  } finally {
+    await updateAlarmStatus();
+  }
+}
+
+async function openAlarmSetting(setting) {
+  try {
+    if (setting === 'battery') await SmsGateway.requestBatteryOptimization();
+    else await AlarmChannel.openFullScreenIntentSettings();
+  } catch (_) {
+    toast('Systemeinstellungen konnten nicht geöffnet werden.');
+  } finally {
+    await updateAlarmStatus();
+  }
+}
+
+function updateAlarmVolumeLabel() {
+  const percent = Number(document.getElementById('alarmVolumeSlider').value);
+  document.getElementById('alarmVolumeLabel').textContent = percent === 0
+    ? 'Systemlautstärke unverändert' : percent + ' %';
+}
+
+async function saveAlarmVolume() {
+  try {
+    await Preferences.set({ key: 'el_alarm_volume_percent', value: document.getElementById('alarmVolumeSlider').value });
+  } catch (_) {
+    toast('Alarmlautstärke konnte nicht gespeichert werden.');
+  }
+  await updateAlarmStatus();
+}
+
+async function previewAlarmVolume() {
+  try {
+    const percent = Number(document.getElementById('alarmVolumeSlider').value);
+    const result = await AlarmChannel.previewVolume({ percent });
+    if (!result.started) toast('Vorschau konnte nicht gestartet werden.');
+  } catch (_) {
+    toast('Vorschau konnte nicht gestartet werden.');
+  }
+}
+
+async function sendServerTestAlarm() {
+  try {
+    const result = await AlarmChannel.sendServerTestAlarm();
+    toast(result.ok
+      ? (result.nativeAlarm ? 'Testalarm gesendet – kommt in wenigen Sekunden'
+        : 'Gesendet, aber Server kennt den nativen Alarm noch nicht – bitte Push neu registrieren')
+      : (result.error || 'Server-Testalarm fehlgeschlagen.'), 5000);
+  } catch (error) {
+    toast(error?.message || 'Server-Testalarm fehlgeschlagen.');
+  }
+}
+
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible' || !AlarmChannel) return;
-  if (alarmDndSetupPending) {
-    alarmDndSetupPending = false;
-    const status = await AlarmChannel.getStatus();
-    if (status.dndPermission && !status.dndBypass) {
-      toast('Bitte jetzt „Nicht stören übergehen“ aktivieren.');
-      await AlarmChannel.openChannelSettings();
-      return;
+  try {
+    if (alarmDndSetupPending) {
+      alarmDndSetupPending = false;
+      const status = await AlarmChannel.getStatus();
+      if (status.dndPermission && !status.dndBypass) {
+        toast('Bitte jetzt "Nicht stören übergehen" aktivieren.');
+        await AlarmChannel.openChannelSettings();
+      }
     }
+  } catch (_) {
+    toast('Systemeinstellungen konnten nicht geöffnet werden.');
+  } finally {
+    await updateAlarmStatus();
   }
-  updateAlarmStatus();
 });
 
 // ── Push-Benachrichtigungen (FCM) ─────────────────────────────────────────────

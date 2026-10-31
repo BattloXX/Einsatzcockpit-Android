@@ -23,16 +23,18 @@ class EinsatzLiveNotifier(private val context: Context) {
     private val manager = context.getSystemService(NotificationManager::class.java)
 
     init {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Laufender Einsatz",
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply {
-            description = "Status und Fortschritt eines laufenden Einsatzes"
-            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            setShowBadge(false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Laufender Einsatz",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Status und Fortschritt eines laufenden Einsatzes"
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setShowBadge(false)
+            }
+            manager.createNotificationChannel(channel)
         }
-        manager.createNotificationChannel(channel)
     }
 
     fun post(state: EinsatzLiveState, baseUrl: String, staleText: String? = null) {
@@ -46,7 +48,14 @@ class EinsatzLiveNotifier(private val context: Context) {
         try {
             manager.notify(NOTIFICATION_ID, buildTier1(state, baseUrl, staleText).build())
             // Erst entfernen, nachdem die laufende Einsatzanzeige erfolgreich gepostet wurde.
-            manager.cancel(EinsatzFirebaseMessagingService.ALARM_FALLBACK_NOTIFICATION_ID)
+            // Ein noch klingender alter Alarm darf durch den Live-Poll nicht verstummen.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val alarmIsSounding = manager.activeNotifications.any {
+                    it.id == EinsatzFirebaseMessagingService.ALARM_FALLBACK_NOTIFICATION_ID &&
+                        it.notification.channelId == AlarmNotificationChannel.CHANNEL_ID
+                }
+                if (!alarmIsSounding) manager.cancel(EinsatzFirebaseMessagingService.ALARM_FALLBACK_NOTIFICATION_ID)
+            }
         } catch (_: SecurityException) {
             SmsGatewayService.log("Live-Einsatzanzeige nicht moeglich: POST_NOTIFICATIONS fehlt")
         }

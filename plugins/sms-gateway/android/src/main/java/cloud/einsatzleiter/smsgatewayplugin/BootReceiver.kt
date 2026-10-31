@@ -17,6 +17,14 @@ class BootReceiver : BroadcastReceiver() {
                 Intent.ACTION_MY_PACKAGE_REPLACED,
                 "android.intent.action.LOCKED_BOOT_COMPLETED")) return
 
+        if (action == Intent.ACTION_MY_PACKAGE_REPLACED || action == Intent.ACTION_BOOT_COMPLETED) {
+            try {
+                FcmTokenRegistration.ensureCapabilitiesRegistered(context, action)
+            } catch (_: Throwable) {
+                // Firebase kann auf diesem Geraet unkonfiguriert sein.
+            }
+        }
+
         val prefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
         ObjektOfflineSyncWorker.schedule(context)
         if (context.resources.getBoolean(R.bool.auto_update_enabled)) {
