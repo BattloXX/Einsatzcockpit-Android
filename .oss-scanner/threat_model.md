@@ -30,8 +30,7 @@ Native functionality lives in the local Capacitor plugin `plugins/sms-gateway` (
 Untrusted input:
 
 - Content loaded into the WebView from the allowed origins (`allowNavigation`:
-  `einsatzcockpit.com`, `*.einsatzcockpit.com`, `einsatzleiter.cloud`,
-  `*.einsatzleiter.cloud`). Any page there can call the Capacitor bridge and the plugin
+  `einsatzcockpit.com`, `*.einsatzcockpit.com`). Any page there can call the Capacitor bridge and the plugin
   methods (`@PluginMethod`).
 - FCM push payloads.
 - WebSocket messages to the SMS gateway.

@@ -12,10 +12,8 @@ class UrlPolicyTest {
             "https://einsatzcockpit.com:443/path?token=example#fragment",
             "https://board.einsatzcockpit.com/",
             "https://a.b.einsatzcockpit.com/",
-            "https://einsatzleiter.cloud/",
-            "https://board.einsatzleiter.cloud:443/",
             "HTTPS://BOARD.EINSATZCOCKPIT.COM/",
-            "hTtPs://EINSATZLEITER.CLOUD/"
+            "hTtPs://EINSATZCOCKPIT.COM/"
         ).forEach { assertTrue(it, UrlPolicy.isAllowedRemoteUrl(it)) }
     }
 
@@ -24,8 +22,9 @@ class UrlPolicyTest {
         listOf(
             "https://evil-einsatzcockpit.com/",
             "https://einsatzcockpit.com.evil.org/",
-            "https://evil-einsatzleiter.cloud/",
-            "https://einsatzleiter.cloud.evil.org/",
+            "https://einsatzleiter.cloud/",
+            "https://board.einsatzleiter.cloud/",
+            "https://einsatzcockpit.com.evil.org/x",
             "https://example.org/",
             "https://localhost/"
         ).forEach { assertFalse(it, UrlPolicy.isAllowedRemoteUrl(it)) }
@@ -41,10 +40,10 @@ class UrlPolicyTest {
             "data:text/html,example",
             "//einsatzcockpit.com/",
             "https://user@einsatzcockpit.com/",
-            "https://user:password@einsatzleiter.cloud/",
+            "https://user:password@einsatzcockpit.com/",
             "https://@einsatzcockpit.com/",
             "https://einsatzcockpit.com:8443/",
-            "https://einsatzleiter.cloud:80/"
+            "https://einsatzcockpit.com:80/"
         ).forEach { assertFalse(it, UrlPolicy.isAllowedRemoteUrl(it)) }
     }
 

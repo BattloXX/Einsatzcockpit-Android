@@ -13,8 +13,6 @@ const config: CapacitorConfig = {
     allowNavigation: [
       'einsatzcockpit.com',
       '*.einsatzcockpit.com',
-      'einsatzleiter.cloud',      // Übergangs-Redirect
-      '*.einsatzleiter.cloud',
     ],
   },
   android: {

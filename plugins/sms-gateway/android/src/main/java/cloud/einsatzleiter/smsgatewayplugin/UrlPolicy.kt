@@ -4,8 +4,7 @@ import java.net.URI
 import java.util.Locale
 
 object UrlPolicy {
-    // Übergangsdomain zentral halten, bis einsatzleiter.cloud entfällt.
-    private val allowedRemoteHosts = listOf("einsatzcockpit.com", "einsatzleiter.cloud")
+    private val allowedRemoteHosts = listOf("einsatzcockpit.com")
 
     fun isAllowedRemoteUrl(url: String?): Boolean {
         return try {

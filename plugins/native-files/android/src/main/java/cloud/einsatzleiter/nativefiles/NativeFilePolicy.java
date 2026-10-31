@@ -6,7 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 final class NativeFilePolicy {
-    static final String INVALID_URL = "Ungültige URL: Nur HTTPS auf einsatzcockpit.com, einsatzleiter.cloud und deren Subdomains ist erlaubt";
+    static final String INVALID_URL = "Ungültige URL: Nur HTTPS auf einsatzcockpit.com und deren Subdomains ist erlaubt";
     static final long MAX_BYTES = 100L * 1024 * 1024;
 
     private NativeFilePolicy() {}
@@ -21,8 +21,7 @@ final class NativeFilePolicy {
                 throw new IllegalArgumentException(INVALID_URL);
             }
             host = host.toLowerCase(Locale.ROOT);
-            if (!(host.equals("einsatzcockpit.com") || host.endsWith(".einsatzcockpit.com")
-                    || host.equals("einsatzleiter.cloud") || host.endsWith(".einsatzleiter.cloud"))) {
+            if (!(host.equals("einsatzcockpit.com") || host.endsWith(".einsatzcockpit.com"))) {
                 throw new IllegalArgumentException(INVALID_URL);
             }
             return uri.toURL();

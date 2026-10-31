@@ -66,8 +66,7 @@ public class MainActivity extends BridgeActivity {
         Uri uri = Uri.parse(url);
         String host = uri.getHost();
         return "https".equalsIgnoreCase(uri.getScheme()) && host != null
-                && (host.equals("einsatzcockpit.com") || host.endsWith(".einsatzcockpit.com")
-                || host.equals("einsatzleiter.cloud") || host.endsWith(".einsatzleiter.cloud"));
+                && (host.equals("einsatzcockpit.com") || host.endsWith(".einsatzcockpit.com"));
     }
 
     private void installOfflineHandling() {

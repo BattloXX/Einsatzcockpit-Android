@@ -33,8 +33,7 @@
       try {
         const url = new URL(value);
         return url.protocol === 'https:' &&
-          (url.hostname === 'einsatzcockpit.com' || url.hostname.endsWith('.einsatzcockpit.com') ||
-           url.hostname === 'einsatzleiter.cloud' || url.hostname.endsWith('.einsatzleiter.cloud'));
+          (url.hostname === 'einsatzcockpit.com' || url.hostname.endsWith('.einsatzcockpit.com'));
       } catch (_) { return false; }
     }
     document.getElementById('retry').addEventListener('click', function () {

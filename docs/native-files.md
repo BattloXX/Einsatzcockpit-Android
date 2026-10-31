@@ -49,7 +49,7 @@ launched, not that the user selected a viewer.
 
 Promises reject with these exact messages (no URLs or cookies are included):
 
-- `Ungültige URL: Nur HTTPS auf einsatzcockpit.com, einsatzleiter.cloud und deren Subdomains ist erlaubt`
+- `Ungültige URL: Nur HTTPS auf einsatzcockpit.com und deren Subdomains ist erlaubt`
 - `Keine App zum Öffnen von PDF-Dateien installiert` (openFile: no viewer; PWA may fall back to download)
 - `Datei konnte nicht geöffnet werden`
 - `Berechtigung zum Speichern in Downloads fehlt`
@@ -67,8 +67,7 @@ rejecting an already resolved promise. The DownloadListener reports errors by to
 
 ## Security
 
-Only HTTPS on `einsatzcockpit.com`, `*.einsatzcockpit.com`, `einsatzleiter.cloud`,
-and `*.einsatzleiter.cloud` is permitted, matching `capacitor.config.ts`
+Only HTTPS on `einsatzcockpit.com`, and `*.einsatzcockpit.com` is permitted, matching `capacitor.config.ts`
 server.allowNavigation. Changes to that allowlist must also update NativeFilePolicy.
 Userinfo, nonstandard ports, suffix lookalikes and foreign hosts are rejected.
 Every redirect target is validated before connecting; there are at most ten redirects.
