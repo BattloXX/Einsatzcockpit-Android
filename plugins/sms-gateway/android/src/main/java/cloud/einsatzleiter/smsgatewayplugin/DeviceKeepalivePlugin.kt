@@ -63,6 +63,46 @@ class DeviceKeepalivePlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getNativeLog(call: PluginCall) {
+        withLocalPage(call) {
+            val text = NativeLog.read()
+            call.resolve(JSObject().apply {
+                put("text", text)
+                put("bytes", text.toByteArray(Charsets.UTF_8).size)
+            })
+        }
+    }
+
+    @PluginMethod
+    fun clearNativeLog(call: PluginCall) {
+        withLocalPage(call) {
+            NativeLog.clear()
+            call.resolve()
+        }
+    }
+
+    @PluginMethod
+    fun shareNativeLog(call: PluginCall) {
+        withLocalPage(call) {
+            val text = NativeLog.read()
+            if (text.isBlank()) return@withLocalPage call.reject("Diagnoseprotokoll ist leer")
+            try {
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, text)
+                    putExtra(Intent.EXTRA_SUBJECT, "Einsatzcockpit Diagnoseprotokoll")
+                }
+                context.startActivity(Intent.createChooser(send, "Diagnoseprotokoll teilen").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+                call.resolve()
+            } catch (error: Exception) {
+                call.reject(error.message ?: "Diagnoseprotokoll konnte nicht geteilt werden")
+            }
+        }
+    }
+
+    @PluginMethod
     fun openInstallPermissionSettings(call: PluginCall) {
         requestUnknownSourcesPermission()
         call.resolve()

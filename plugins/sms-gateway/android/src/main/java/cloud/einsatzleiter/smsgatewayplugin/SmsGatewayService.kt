@@ -93,6 +93,7 @@ class SmsGatewayService : Service() {
         }
 
         internal fun log(msg: String) {
+            NativeLog.append(msg)
             emit("logEvent") {
                 put("msg", msg)
                 put("ts", System.currentTimeMillis())
@@ -241,6 +242,7 @@ class SmsGatewayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        NativeLog.init(applicationContext)
         createNotificationChannel()
         dispatchJournal = SmsDispatchJournal(applicationContext, ::dispatchScope)
         dispatchProtocol = SmsDispatchProtocol(dispatchJournal, object : SmsDispatchProtocol.Modem {

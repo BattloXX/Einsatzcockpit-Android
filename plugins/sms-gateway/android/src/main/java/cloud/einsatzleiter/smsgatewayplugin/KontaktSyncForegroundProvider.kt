@@ -18,6 +18,7 @@ class KontaktSyncForegroundProvider : ContentProvider() {
     override fun onCreate(): Boolean = try {
         val appContext = context?.applicationContext
         if (appContext != null) {
+            NativeLog.init(appContext)
             registerOfflineContactsShortcut(appContext)
             ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
                 override fun onStart(owner: LifecycleOwner) {
