@@ -284,6 +284,17 @@
     <div style="margin-top:12px;"><button class="btn-ghost" style="width:100%;" id="btnRefreshOfflineCache" onclick="refreshOfflineCache()">↻ Offline-Daten jetzt aktualisieren</button></div>
   </div>
 
+  <div class="card" id="nativeLogCard">
+    <div class="card-label">Diagnoseprotokoll</div>
+    <p style="font-size:13px;color:var(--muted);">Letzte native Ereignisse (Alarm, Push, Live-Status, Updates). Keine Zugangsdaten.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn-ghost" onclick="updateNativeLog()">Aktualisieren</button>
+      <button class="btn-ghost" onclick="shareNativeLog()">Teilen</button>
+      <button class="btn-ghost" onclick="clearNativeLog()">Löschen</button>
+    </div>
+    <pre id="nativeLogText" style="max-height:240px;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--text);">Noch keine Ereignisse geladen.</pre>
+  </div>
+
   <!-- SMS-Gateway (nur sichtbar wenn dieses Geraet als Gateway konfiguriert ist) -->
   <div class="card" id="gatewayCard" style="display:none;">
     <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
@@ -321,6 +332,7 @@ let alarmDndSetupPending = false;
 let alarmPushReady = false;
 
 waitForCapacitor(async () => {
+  updateNativeLog();
   Preferences = window.Capacitor.Plugins.Preferences;
   SmsGateway = window.Capacitor.Plugins.SmsGateway;
   AlarmChannel = window.Capacitor.Plugins.AlarmChannel;
@@ -380,6 +392,44 @@ function escapeHtml(value) {
   const node = document.createElement('span');
   node.textContent = value || '';
   return node.innerHTML;
+}
+
+async function updateNativeLog() {
+  const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
+  const output = document.getElementById('nativeLogText');
+  if (!plugin?.getNativeLog) {
+    output.textContent = 'Diagnoseprotokoll ist nur in der Android-App verfügbar.';
+    return;
+  }
+  try {
+    const { text } = await plugin.getNativeLog();
+    output.textContent = text ? text.replace(/\n$/, '').split('\n').slice(-150).join('\n') : 'Noch keine nativen Ereignisse.';
+  } catch (error) {
+    toast('Diagnoseprotokoll konnte nicht geladen werden.');
+  }
+}
+
+async function shareNativeLog() {
+  const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
+  if (!plugin?.shareNativeLog) return toast('Teilen ist nur in der Android-App verfügbar.');
+  try {
+    await plugin.shareNativeLog();
+  } catch (error) {
+    toast(error?.message || 'Diagnoseprotokoll konnte nicht geteilt werden.');
+  }
+}
+
+async function clearNativeLog() {
+  const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
+  if (!plugin?.clearNativeLog) return toast('Löschen ist nur in der Android-App verfügbar.');
+  if (!confirm('Diagnoseprotokoll löschen?')) return;
+  try {
+    await plugin.clearNativeLog();
+    await updateNativeLog();
+    toast('Diagnoseprotokoll wurde gelöscht.');
+  } catch (error) {
+    toast('Diagnoseprotokoll konnte nicht gelöscht werden.');
+  }
 }
 
 async function updateOfflineCacheStatus() {

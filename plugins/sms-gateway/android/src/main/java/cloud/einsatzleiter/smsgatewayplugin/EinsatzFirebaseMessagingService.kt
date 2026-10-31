@@ -29,6 +29,11 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
         private val EINSATZ_PRELOAD_URL_REGEX = Regex("^/einsatz/\\d+(/info)?$")
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        NativeLog.init(applicationContext)
+    }
+
     override fun onNewToken(token: String) {
         FcmTokenRegistration.post(this, token) { result ->
             result.exceptionOrNull()?.let {

@@ -12,6 +12,7 @@ import android.os.Build
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        NativeLog.init(context.applicationContext)
         val action = intent.action ?: return
         if (action !in listOf(
                 Intent.ACTION_BOOT_COMPLETED,

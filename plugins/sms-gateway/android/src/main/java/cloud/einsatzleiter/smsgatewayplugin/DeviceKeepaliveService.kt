@@ -40,6 +40,7 @@ class DeviceKeepaliveService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        NativeLog.init(applicationContext)
         createNotificationChannel()
         livePoller = EinsatzLivePoller(
             this,
