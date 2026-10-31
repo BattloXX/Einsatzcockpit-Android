@@ -458,12 +458,17 @@ async function startScan() {
   }
 }
 
-const ALLOWED_HOSTS = ['einsatzcockpit.com', 'einsatzleiter.cloud'];
+const ALLOWED_HOSTS = ['einsatzcockpit.com'];
 
 async function handleQrResult(raw, Preferences, SmsGateway) {
   let parsed;
   try { parsed = new URL(raw); }
   catch (_) { showError('Ungültiger QR-Code.'); return; }
+
+  if (parsed.protocol !== 'https:') {
+    showError('QR-Code muss eine https-Adresse enthalten.');
+    return;
+  }
 
   if (!ALLOWED_HOSTS.includes(parsed.hostname)) {
     showError('QR-Code von unbekanntem Server – abgelehnt.');

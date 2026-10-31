@@ -21,6 +21,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
 import cloud.einsatzleiter.nativefiles.NativeFilesPlugin;
+import cloud.einsatzleiter.smsgatewayplugin.UrlPolicy;
 
 public class MainActivity extends BridgeActivity {
     // Gleicher Wert wie DeviceAccessState.EXTRA_RECONNECT im Plugin (Hinweis "Gerätezugang ungültig").
@@ -65,8 +66,7 @@ public class MainActivity extends BridgeActivity {
         Uri uri = Uri.parse(url);
         String host = uri.getHost();
         return "https".equalsIgnoreCase(uri.getScheme()) && host != null
-                && (host.equals("einsatzcockpit.com") || host.endsWith(".einsatzcockpit.com")
-                || host.equals("einsatzleiter.cloud") || host.endsWith(".einsatzleiter.cloud"));
+                && (host.equals("einsatzcockpit.com") || host.endsWith(".einsatzcockpit.com"));
     }
 
     private void installOfflineHandling() {
@@ -100,7 +100,8 @@ public class MainActivity extends BridgeActivity {
             public void onCapabilitiesChanged(Network network, NetworkCapabilities capabilities) {
                 if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return;
                 handler.post(() -> {
-                    if (offlinePageVisible && isOfflineUrl(bridge.getWebView().getUrl())) {
+                    if (offlinePageVisible && isOfflineUrl(bridge.getWebView().getUrl())
+                            && UrlPolicy.INSTANCE.isAllowedRemoteUrl(lastAttemptedUrl)) {
                         offlinePageVisible = false;
                         bridge.getWebView().loadUrl(lastAttemptedUrl);
                     }

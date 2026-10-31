@@ -9,7 +9,7 @@ public class NativeFilePolicyTest {
     @Test
     public void permitsOnlyConfiguredHttpsHosts() {
         for (String host : new String[] { "einsatzcockpit.com", "files.einsatzcockpit.com",
-                "einsatzleiter.cloud", "a.b.einsatzleiter.cloud", "EINSATZCOCKPIT.COM" }) {
+                "a.b.einsatzcockpit.com", "EINSATZCOCKPIT.COM" }) {
             assertNotNull(NativeFilePolicy.checkedUrl("https://" + host + ":443/report.pdf"));
         }
         for (String url : new String[] { null, "", "https://", "http://einsatzcockpit.com/a",
@@ -18,7 +18,8 @@ public class NativeFilePolicyTest {
                 "https://einsatzcockpit.com:8443/a", "https://einsatzcockpit.com./a",
                 "https://einsatzcockpit.com\\@evil.test/a", "https://127.0.0.1/a",
                 "blob:https://einsatzcockpit.com/a", "data:application/pdf,test",
-                "https://%65insatzcockpit.com/a", "https://evil.test/?token=secret" }) {
+                "https://%65insatzcockpit.com/a", "https://evil.test/?token=secret",
+                "https://einsatzleiter.cloud/a" }) {
             reject(url);
         }
     }
@@ -27,7 +28,7 @@ public class NativeFilePolicyTest {
     public void checksRelativeAndAbsoluteRedirectTargets() throws Exception {
         URL base = NativeFilePolicy.checkedUrl("https://einsatzcockpit.com/files/a");
         assertEquals("https://einsatzcockpit.com/report.pdf", NativeFilePolicy.redirect(base, "../report.pdf").toString());
-        assertEquals("files.einsatzleiter.cloud", NativeFilePolicy.redirect(base, "https://files.einsatzleiter.cloud/a").getHost());
+        assertEquals("files.einsatzcockpit.com", NativeFilePolicy.redirect(base, "https://files.einsatzcockpit.com/a").getHost());
         for (String location : new String[] { "//evil.test/a", "http://einsatzcockpit.com/a", null, "", "https://evil.test/a" }) {
             try {
                 NativeFilePolicy.redirect(base, location);

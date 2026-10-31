@@ -267,6 +267,12 @@ class SmsGatewayService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 val nextUrl = intent.getStringExtra(EXTRA_URL) ?: wsUrl
+                if (!UrlPolicy.isAllowedRemoteUrl(nextUrl)) {
+                    log("Gateway-URL nicht erlaubt")
+                    // Per startForegroundService gestartet: ohne stopSelf droht ein FGS-Timeout-Crash.
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 val nextToken = intent.getStringExtra(EXTRA_TOKEN) ?: token
                 if (nextUrl != wsUrl || nextToken != token) {
                     connectionEpoch.incrementAndGet()
@@ -312,6 +318,11 @@ class SmsGatewayService : Service() {
             }
             null -> {
                 // System-Neustart (START_STICKY) – Konfig aus SharedPrefs
+                if (wsUrl.isNotEmpty() && !UrlPolicy.isAllowedRemoteUrl(wsUrl)) {
+                    log("Gateway-URL nicht erlaubt")
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 if (wsUrl.isNotEmpty() && token.isNotEmpty()) {
                     running = true
                     log("Service neu gestartet (System/Boot)")
