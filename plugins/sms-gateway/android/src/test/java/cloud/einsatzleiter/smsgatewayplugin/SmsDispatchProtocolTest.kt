@@ -45,6 +45,29 @@ class SmsDispatchProtocolTest {
     }
     @After fun cleanup() { journal.close() }
 
+    @Test fun hasAttemptingChecksAllScopesThroughSeparateInstance() {
+        val foreign = SmsDispatchJournal.scope("https://cloud.test", "other-token")
+        val observer = SmsDispatchJournal(context, { "" })
+        try {
+            assertFalse(observer.hasAttempting())
+            journal.prepare(foreign, message("sms.prepare"))
+            assertFalse(observer.hasAttempting())
+            journal.beginAttempt(foreign, "job", 1)
+            assertTrue(observer.hasAttempting())
+            journal.part(foreign, "job", 1, 0, 2, true)
+            assertTrue(observer.hasAttempting())
+            journal.part(foreign, "job", 1, 1, 2, true)
+            assertFalse(observer.hasAttempting())
+            journal.prepare(scope, message("sms.prepare"))
+            journal.beginAttempt(scope, "job", 1)
+            assertTrue(observer.hasAttempting())
+            journal.recover()
+            assertFalse(observer.hasAttempting())
+        } finally {
+            observer.close()
+        }
+    }
+
     @Test fun receiptRequiresCommitAndDuplicateMessagesSubmitOnlyOnce() {
         protocol.handle(scope, message("sms.prepare"))
         protocol.handle(scope, message("sms.prepare"))

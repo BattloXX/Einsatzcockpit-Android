@@ -19,6 +19,9 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
+internal fun nextAuthFailureCount(previous: Int, authFailure: Boolean): Int =
+    if (authFailure) (previous + 1).coerceAtMost(3) else 0
+
 class EinsatzLivePoller(
     private val context: Context,
     private val onNeeded: () -> Unit = {},
@@ -57,6 +60,7 @@ class EinsatzLivePoller(
     private var running = false
     private var inFlight: Call? = null
     private var failures = 0
+    private var authFailures = 0
     private var currentState: EinsatzLiveState? = null
     private var idleSinceMs: Long? = null
     private val pollRunnable = Runnable { poll() }
@@ -76,6 +80,7 @@ class EinsatzLivePoller(
         if (running) return
         if (!isEnabled()) {
             log("Live-Poller nicht gestartet: Device-Token/Live-Opt-in fehlt")
+            onIdleTimeout()
             return
         }
         running = true
@@ -100,6 +105,9 @@ class EinsatzLivePoller(
         if (!running) return
         if (!isEnabled()) {
             log("Live-Poll abgebrochen: Device-Token/Live-Opt-in fehlt")
+            clearIncident()
+            stop()
+            onIdleTimeout()
             return
         }
         handler.removeCallbacks(pollRunnable)
@@ -116,6 +124,7 @@ class EinsatzLivePoller(
             log("Live-Poll beendet: Device-Token/Live-Opt-in fehlt")
             clearIncident()
             stop()
+            onIdleTimeout()
             return
         }
         val baseUrl = prefs.getString(PREF_BASE_URL, null)?.trimEnd('/')
@@ -127,6 +136,7 @@ class EinsatzLivePoller(
         if (DeviceAccessState.isInvalid(context)) {
             log("Live-Poll gestoppt: Gerätezugang ungültig")
             stop()
+            onIdleTimeout()
             return
         }
         if (prefs.getString("el_device_token", null).isNullOrBlank()) {
@@ -186,6 +196,7 @@ class EinsatzLivePoller(
             return
         }
         failures = 0
+        authFailures = nextAuthFailureCount(authFailures, false)
         val now = System.currentTimeMillis()
         val state = response.incident
         if (response.hasIncident && state == null) {
@@ -252,6 +263,12 @@ class EinsatzLivePoller(
         log("Live-Poll Authentifizierung fehlgeschlagen (HTTP $statusCode)")
         failures = 0
         clearIncident()
+        authFailures = nextAuthFailureCount(authFailures, true)
+        if (authFailures >= 3) {
+            stop()
+            onIdleTimeout()
+            return
+        }
         schedule(AUTH_INTERVAL_MS)
     }
 

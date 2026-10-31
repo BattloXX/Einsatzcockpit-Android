@@ -39,11 +39,26 @@ class EinsatzAlarmService : Service() {
     private var originalVolume: Int? = null
     private var currentAlarm: Intent? = null
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
-        if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-            SmsGatewayService.log("Alarm: Audiofokus verloren")
-            player?.pause()
-        } else if (change == AudioManager.AUDIOFOCUS_GAIN) {
-            player?.start()
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                SmsGatewayService.log("Alarm: Audiofokus vorübergehend verloren")
+                player?.pause()
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> player?.start()
+            AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                // Einsatzalarm hat Vorrang vor Medien und spielt deshalb weiter.
+                SmsGatewayService.log("Alarm: Audiofokus verloren ($change), Wiedergabe läuft weiter")
+            }
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        // Ein Prozessabbruch kann den gesicherten Wert hinterlassen; vor jedem neuen Alarm bereinigen.
+        if (!isActive) {
+            val prefs = getSharedPreferences("CapacitorStorage", MODE_PRIVATE)
+            originalVolume = prefs.getString(PREF_ORIGINAL_VOLUME, null)?.toIntOrNull()
+            restoreOriginalVolume()
         }
     }
 
@@ -74,6 +89,7 @@ class EinsatzAlarmService : Service() {
             foregroundFailed(intent, e)
             return START_NOT_STICKY
         }
+        isActive = true
         SmsGatewayService.log("Alarm: gestartet")
         try {
             wakeLock = getSystemService(PowerManager::class.java)
@@ -89,6 +105,8 @@ class EinsatzAlarmService : Service() {
                     val volume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
                     val maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
                     originalVolume = volume
+                    getSharedPreferences("CapacitorStorage", MODE_PRIVATE).edit()
+                        .putString(PREF_ORIGINAL_VOLUME, volume.toString()).commit()
                     audioManager.setStreamVolume(
                         AudioManager.STREAM_ALARM, ceil(maximum * percent / 100.0).toInt().coerceAtLeast(1), 0,
                     )
@@ -210,6 +228,7 @@ class EinsatzAlarmService : Service() {
     }
 
     private fun releaseAlarm() {
+        isActive = false
         handler.removeCallbacksAndMessages(null)
         player?.let { media ->
             try { media.stop() } catch (_: IllegalStateException) { }
@@ -218,15 +237,7 @@ class EinsatzAlarmService : Service() {
         player = null
         vibrator?.cancel()
         vibrator = null
-        originalVolume?.let { volume ->
-            try {
-                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, volume, 0)
-                SmsGatewayService.log("Alarm: Systemlautstaerke wiederhergestellt")
-            } catch (_: SecurityException) {
-                SmsGatewayService.log("Alarm: Systemlautstaerke konnte nicht wiederhergestellt werden")
-            }
-        }
-        originalVolume = null
+        restoreOriginalVolume()
         if (focusRequested) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
@@ -241,6 +252,20 @@ class EinsatzAlarmService : Service() {
         wakeLock = null
     }
 
+    private fun restoreOriginalVolume() {
+        val prefs = getSharedPreferences("CapacitorStorage", MODE_PRIVATE)
+        try {
+            originalVolume?.let { volume ->
+                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, volume, 0)
+                SmsGatewayService.log("Alarm: Systemlautstaerke wiederhergestellt")
+            }
+            prefs.edit().remove(PREF_ORIGINAL_VOLUME).commit()
+        } catch (_: SecurityException) {
+            SmsGatewayService.log("Alarm: Systemlautstaerke konnte nicht wiederhergestellt werden")
+        }
+        originalVolume = null
+    }
+
     override fun onDestroy() {
         releaseAlarm()
         AlarmActivity.finishAlarm()
@@ -248,6 +273,10 @@ class EinsatzAlarmService : Service() {
     }
 
     companion object {
+        @Volatile var isActive = false
+            private set
+        private const val PREF_ORIGINAL_VOLUME = "ec_alarm_original_volume"
+
         const val ACTION_START = "cloud.einsatzleiter.smsgatewayplugin.ALARM_START"
         const val ACTION_STOP = "cloud.einsatzleiter.smsgatewayplugin.ALARM_STOP"
         const val EXTRA_INCIDENT_ID = "incidentId"

@@ -46,6 +46,10 @@ class SmsDispatchJournal(
         "SELECT * FROM sms_jobs WHERE scope=? AND job_id=?", arrayOf(scope, jobId)
     ).use { if (it.moveToFirst()) record(it) else null }
 
+    @Synchronized fun hasAttempting(): Boolean = readableDatabase.rawQuery(
+        "SELECT 1 FROM sms_jobs WHERE phase='attempting' LIMIT 1", null
+    ).use { it.moveToFirst() }
+
     @Synchronized fun prepare(scope: String, message: JSONObject): JSONObject? {
         val wire = message.optString("id")
         val jobId = message.optString("job_id", wire)
