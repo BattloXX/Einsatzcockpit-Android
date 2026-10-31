@@ -112,14 +112,20 @@ class AlarmChannelPlugin : Plugin() {
         }
         try {
             FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-                FcmTokenRegistration.sendTestAlarm(context, token) { result ->
-                    result.fold(onSuccess = { json ->
-                        call.resolve(JSObject().apply {
-                            put("ok", json.optBoolean("ok", true))
-                            put("nativeAlarm", json.optBoolean("native_alarm", json.optBoolean("nativeAlarm", false)))
-                            put("error", json.optString("error", ""))
-                        })
-                    }, onFailure = { error -> resolveError(error.message ?: "Server-Testalarm fehlgeschlagen") })
+                FcmTokenRegistration.post(context, token) { registration ->
+                    registration.fold(onSuccess = {
+                        FcmTokenRegistration.sendTestAlarm(context, token) { result ->
+                            result.fold(onSuccess = { json ->
+                                call.resolve(JSObject().apply {
+                                    put("ok", json.optBoolean("ok", true))
+                                    put("nativeAlarm", json.optBoolean("native_alarm", json.optBoolean("nativeAlarm", false)))
+                                    put("error", json.optString("error", ""))
+                                })
+                            }, onFailure = { error -> resolveError(error.message ?: "Server-Testalarm fehlgeschlagen") })
+                        }
+                    }, onFailure = { error ->
+                        resolveError("Push-Registrierung fehlgeschlagen: ${error.message ?: "unbekannter Fehler"}")
+                    })
                 }
             }.addOnFailureListener { error ->
                 resolveError(error.message ?: "FCM-Token nicht verfuegbar")

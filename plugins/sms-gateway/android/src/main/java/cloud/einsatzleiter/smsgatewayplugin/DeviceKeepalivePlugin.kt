@@ -1,5 +1,6 @@
 package cloud.einsatzleiter.smsgatewayplugin
 
+import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -126,7 +127,15 @@ class DeviceKeepalivePlugin : Plugin() {
             ?: return call.reject("token erforderlich")
         FcmTokenRegistration.post(context, token) { result ->
             result.fold(
-                onSuccess = { call.resolve() },
+                onSuccess = { nativeAlarm ->
+                    if (nativeAlarm) {
+                        runCatching {
+                            context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE).edit()
+                                .putString("ec_fcm_caps_registered", FcmTokenRegistration.capabilitiesRegistrationValue(context)).apply()
+                        }.onFailure { SmsGatewayService.log("FCM-Faehigkeiten nicht gespeichert: ${it.message}") }
+                    }
+                    call.resolve(JSObject().apply { put("nativeAlarm", nativeAlarm) })
+                },
                 onFailure = { call.reject(it.message ?: "FCM-Token konnte nicht registriert werden") },
             )
         }
@@ -154,6 +163,7 @@ class DeviceKeepalivePlugin : Plugin() {
                     call.resolve(JSObject().apply {
                         put("registered", json.getBoolean("registered"))
                         if (json.has("registered_at")) put("registered_at", json.opt("registered_at"))
+                        if (json.has("native_alarm")) put("native_alarm", json.optBoolean("native_alarm"))
                         if (json.has("last_delivery_success")) {
                             put("last_delivery_success", json.opt("last_delivery_success"))
                         }

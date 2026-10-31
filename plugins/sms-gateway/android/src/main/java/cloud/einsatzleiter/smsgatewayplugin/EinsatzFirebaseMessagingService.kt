@@ -39,6 +39,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
+        SmsGatewayService.log("FCM empfangen: alarm=${data["alarm"]} channel=${data["channel_id"]} test=${data["test"]}")
         val rawUrl = data["url"]
         val incidentPath = rawUrl?.let { url ->
             try { android.net.Uri.parse(url).path } catch (_: Exception) { null }

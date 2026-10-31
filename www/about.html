@@ -65,6 +65,7 @@
     .alarm-checklist li::before { content:"";width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0; }
     .alarm-checklist li.ready { color:var(--green); }
     .alarm-checklist li > span { flex:1;min-width:0; }
+    #pushStatusBadge { font-size:.72rem;overflow-wrap:anywhere; }
     .alarm-checklist button[hidden] { display:none; }
     .alarm-checklist button { font-size:.72rem;padding:6px 8px;flex-shrink:0; }
     .alarm-volume { margin-top:12px;font-size:.85rem; }
@@ -153,12 +154,23 @@
     <label class="toggle-row"><span>Alarmton auch bei Lautlos/Vibration (Vollbild)</span><span class="toggle"><input type="checkbox" id="alarmEnabledToggle" onchange="setAlarmEnabled(this.checked)"><span class="toggle-slider"></span></span></label>
     <label class="toggle-row"><span>Auch bei „Nicht stören“</span><span class="toggle"><input type="checkbox" id="alarmDndToggle" onchange="configureAlarmDnd(this.checked)"><span class="toggle-slider"></span></span></label>
     <ul class="alarm-checklist" aria-label="Alarm-Einrichtung">
+      <!-- Push-Benachrichtigungen: hier statt auf /admin/push-nachrichten, weil die
+           Capacitor-Bridge auf DIESER lokalen Seite garantiert verfuegbar ist - auf
+           der remote nachgeladenen Admin-Seite ist sie das bekanntermassen nicht
+           zuverlaessig (siehe Backend main.py::session_middleware-Kommentar). -->
+      <li id="alarmPushRow"><span>Push beim Server eingerichtet <span id="pushStatusBadge">Prüfe…</span></span><button class="btn-ghost" id="btnRegisterPush" onclick="registerPushAndContinue()">Registrieren</button></li>
       <li id="alarmNotificationsRow"><span>Benachrichtigungen erlaubt</span><button class="btn-ghost" onclick="requestAlarmNotifications()">Erlauben</button></li>
       <li id="alarmFullScreenRow"><span>Vollbild-Alarm erlaubt</span><button class="btn-ghost" onclick="openAlarmSetting('fullscreen')">Erlauben</button></li>
       <li id="alarmBatteryRow"><span>Akku-Optimierung aus</span><button class="btn-ghost" onclick="openAlarmSetting('battery')">Einrichten</button></li>
       <li id="alarmDndRow"><span>Nicht stören übergehen</span><button class="btn-ghost" onclick="configureAlarmDnd(true)">Einrichten</button></li>
       <li id="alarmVolumeRow"><span>Alarmlautstärke System: <span id="alarmSystemVolume">–</span></span><button class="btn-ghost" onclick="document.getElementById('alarmVolumeSlider').focus()">Anpassen</button></li>
     </ul>
+    <p id="pushSetupHint" style="display:none;font-size:.82rem;color:var(--muted);margin-top:10px;">
+      Tippe auf „Registrieren“, um dieses Gerät beim Server einzurichten.
+    </p>
+    <p id="pushDeliveryWarning" style="display:none;font-size:.82rem;color:var(--yellow);margin-top:10px;">
+      Der letzte Zustellversuch ist fehlgeschlagen.
+    </p>
     <div class="alarm-volume">
       <label for="alarmVolumeSlider">Alarmlautstärke: <span id="alarmVolumeLabel">80 %</span></label>
       <input type="range" id="alarmVolumeSlider" min="0" max="100" step="10" value="80" oninput="updateAlarmVolumeLabel()" onchange="saveAlarmVolume()">
@@ -251,33 +263,6 @@
     <div style="margin-top:12px;"><button class="btn-ghost" style="width:100%;" id="btnRefreshOfflineCache" onclick="refreshOfflineCache()">↻ Offline-Daten jetzt aktualisieren</button></div>
   </div>
 
-  <!-- Push-Benachrichtigungen: hier statt auf /admin/push-nachrichten, weil die
-       Capacitor-Bridge auf DIESER lokalen Seite garantiert verfuegbar ist - auf
-       der remote nachgeladenen Admin-Seite ist sie das bekanntermassen nicht
-       zuverlaessig (siehe Backend main.py::session_middleware-Kommentar). -->
-  <div class="card">
-    <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
-      <span>🔔 Push-Benachrichtigungen</span>
-      <span class="badge-soft" id="pushStatusBadge">Prüfe…</span>
-    </div>
-    <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
-      Registriert dieses Gerät für Push-Benachrichtigungen (Firebase Cloud Messaging).
-      Nach der Registrierung wirst du kurz zur App weitergeleitet, um sie mit deinem
-      Konto zu verknüpfen.
-    </p>
-    <p id="pushSetupHint" style="display:none;font-size:.82rem;color:var(--muted);margin-top:10px;">
-      Tippe auf „Push jetzt registrieren“, um dieses Gerät beim Server einzurichten.
-    </p>
-    <p id="pushDeliveryWarning" style="display:none;font-size:.82rem;color:var(--yellow);margin-top:10px;">
-      Der letzte Zustellversuch ist fehlgeschlagen.
-    </p>
-    <div style="margin-top:10px;">
-      <button class="btn-primary" style="width:100%;" id="btnRegisterPush" onclick="registerPushAndContinue()">
-        🔔 Push jetzt registrieren
-      </button>
-    </div>
-  </div>
-
   <!-- SMS-Gateway (nur sichtbar wenn dieses Geraet als Gateway konfiguriert ist) -->
   <div class="card" id="gatewayCard" style="display:none;">
     <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
@@ -312,6 +297,7 @@ let SmsGateway;
 let AlarmChannel;
 let Preferences;
 let alarmDndSetupPending = false;
+let alarmPushReady = false;
 
 waitForCapacitor(async () => {
   Preferences = window.Capacitor.Plugins.Preferences;
@@ -330,7 +316,6 @@ waitForCapacitor(async () => {
   await initializeUpdateChannelToggle();
   await updateDeviceStatusReportingSetting();
   checkForUpdate();
-  updatePushStatusBadge();
   updateAlarmStatus();
   updateOfflineCacheStatus();
   setInterval(updateOfflineCacheStatus, 5000);
@@ -464,6 +449,7 @@ async function clearObjectCache() {
 
 // ── Alarmkanal ────────────────────────────────────────────────────────────────
 async function updateAlarmStatus() {
+  await updatePushStatusBadge();
   if (!AlarmChannel?.getStatus) return;
   try {
     const status = await AlarmChannel.getStatus();
@@ -495,7 +481,7 @@ async function updateAlarmStatus() {
     setAlarmCheck('alarmDndRow', status.nativeChannelDndBypass || status.dndBypass);
     setAlarmCheck('alarmVolumeRow', volumeReady);
     document.getElementById('alarmSystemVolume').textContent = status.alarmVolume + ' %';
-    const ready = status.enabled && status.notificationsGranted && status.fullScreenIntentAllowed
+    const ready = alarmPushReady && status.enabled && status.notificationsGranted && status.fullScreenIntentAllowed
       && status.batteryOptimizationIgnored && volumeReady;
     document.getElementById('alarmSetupHint').style.display = ready ? 'none' : '';
     if (!status.notificationsGranted) {
@@ -617,8 +603,9 @@ async function sendServerTestAlarm() {
     const result = await AlarmChannel.sendServerTestAlarm();
     toast(result.ok
       ? (result.nativeAlarm ? 'Testalarm gesendet – kommt in wenigen Sekunden'
-        : 'Gesendet, aber Server kennt den nativen Alarm noch nicht – bitte Push neu registrieren')
+        : 'Gesendet, aber der Server kennt den Einsatzalarm dieses Geräts nicht – kam als normale Meldung.')
       : (result.error || 'Server-Testalarm fehlgeschlagen.'), 5000);
+    await updatePushStatusBadge();
   } catch (error) {
     toast(error?.message || 'Server-Testalarm fehlgeschlagen.');
   }
@@ -660,8 +647,11 @@ async function updatePushStatusBadge() {
   const PushNotifications = window.Capacitor?.Plugins?.PushNotifications;
   if (!PushNotifications || !PushNotifications.checkPermissions) {
     badge.textContent = 'unbekannt';
+    alarmPushReady = false;
+    setAlarmCheck('alarmPushRow', false);
     return;
   }
+  let ready = false;
   try {
     const perm = await PushNotifications.checkPermissions();
     if (perm.receive === 'granted') {
@@ -671,23 +661,25 @@ async function updatePushStatusBadge() {
       }
       const { token } = await DeviceKeepalive.getPushToken();
       const status = await DeviceKeepalive.getPushStatus({ token });
-      if (status.registered === true) {
+      ready = status.registered === true && status.native_alarm !== false;
+      if (ready) {
         badge.textContent = 'Eingerichtet';
-        badge.className = 'badge-soft on';
         deliveryWarning.style.display = status.last_delivery_success === false ? '' : 'none';
       } else {
         badge.textContent = 'Erlaubt, aber nicht eingerichtet';
-        badge.className = 'badge-soft off';
+        setupHint.textContent = status.registered === true && status.native_alarm === false
+          ? 'Server kennt den Einsatzalarm dieses Geräts noch nicht – bitte Registrieren tippen.'
+          : 'Tippe auf „Registrieren“, um dieses Gerät beim Server einzurichten.';
         setupHint.style.display = '';
       }
     } else {
       badge.textContent = 'Nicht erlaubt';
-      badge.className = 'badge-soft off';
     }
   } catch (_) {
     badge.textContent = 'Status unbekannt';
-    badge.className = 'badge-soft';
   }
+  alarmPushReady = ready;
+  setAlarmCheck('alarmPushRow', ready);
 }
 
 // Holt einen frischen FCM-Token - identisches Muster wie index.html::registerPushToken(),
@@ -739,7 +731,7 @@ async function registerPushAndContinue() {
   if (btn.disabled) return;
   btn.disabled = true;
   const prev = btn.textContent;
-  btn.textContent = '⏳ Registriere…';
+  btn.textContent = '⏳ …';
   try {
     const token = await fetchFcmToken();
     if (!token) {
@@ -750,14 +742,10 @@ async function registerPushAndContinue() {
     if (!DeviceKeepalive?.registerFcmToken) {
       throw new Error('Native Server-Registrierung ist nicht verfügbar.');
     }
-    await DeviceKeepalive.registerFcmToken({ token });
-    await updatePushStatusBadge();
-    toast('✅ Push-Benachrichtigungen aktiviert.');
-    // Der Redirect bleibt fuer den bestehenden WebView-PWA-Handoff erhalten.
-    setTimeout(() => {
-      window.location.replace(
-        'https://einsatzcockpit.com/?native=1&fcm_token=' + encodeURIComponent(token));
-    }, 900);
+    const result = await DeviceKeepalive.registerFcmToken({ token });
+    await updateAlarmStatus();
+    toast(result.nativeAlarm ? '✅ Push eingerichtet – Einsatzalarm aktiv.'
+      : 'Push registriert, aber der Server bestätigt den Einsatzalarm noch nicht.');
   } catch (e) {
     console.warn('[Push] Server-Registrierung fehlgeschlagen:', e);
     toast('❌ Registrierung fehlgeschlagen: ' + (e?.message || 'unbekannter Fehler') + ' — bitte erneut versuchen.');
