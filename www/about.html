@@ -75,6 +75,7 @@
     .alarm-checklist button { font-size:.72rem;padding:6px 8px;flex-shrink:0; }
     .alarm-volume { margin-top:12px;font-size:.85rem; }
     .alarm-volume input { display:block;width:100%;margin:12px 0; }
+    .alarm-volume select { display:block;width:100%;box-sizing:border-box;margin:8px 0 12px;padding:10px;border:1px solid var(--line2);border-radius:8px;background:var(--bg);color:var(--text);font:inherit; }
     .alarm-note { color:var(--muted);font-size:.78rem;line-height:1.45;margin-top:10px; }
     .alarm-actions { display:flex;flex-direction:column;gap:10px;margin-top:14px; }
 
@@ -184,6 +185,14 @@
       <li id="alarmVolumeRow"><span>Alarmlautstärke System: <span id="alarmSystemVolume">–</span></span><button class="btn-ghost" onclick="document.getElementById('alarmVolumeSlider').focus()">Anpassen</button></li>
     </ul>
     <div class="alarm-volume">
+      <label for="alarmToneSelect">Alarmton</label>
+      <select id="alarmToneSelect" onchange="saveAlarmTone()" disabled>
+        <option value="standard">Standard-Alarm</option>
+        <option value="sirene">Sirene</option>
+        <option value="martinshorn">Martinshorn</option>
+      </select>
+      <button class="btn-ghost" id="btnAlarmTonePreview" onclick="previewAlarmVolume()" disabled>▶ Ton anhören</button>
+      <p class="alarm-note">Der gewählte Ton wird für den nativen Einsatzalarm verwendet.</p>
       <label for="alarmVolumeSlider">Alarmlautstärke: <span id="alarmVolumeLabel">80 %</span></label>
       <input type="range" id="alarmVolumeSlider" min="0" max="100" step="10" value="80" oninput="updateAlarmVolumeLabel()" onchange="saveAlarmVolume()">
       <button class="btn-ghost" id="btnAlarmPreview" onclick="previewAlarmVolume()" disabled>▶ Vorschau</button>
@@ -485,10 +494,12 @@ async function updateAlarmStatus() {
     enabled.checked = status.enabled;
     dnd.checked = status.nativeChannelDndBypass || status.dndBypass;
     dnd.disabled = !status.enabled;
-    ['btnAlarmTest', 'btnAlarmServerTest', 'btnAlarmPreview'].forEach((id) => {
+    ['btnAlarmTest', 'btnAlarmServerTest', 'btnAlarmPreview', 'btnAlarmTonePreview', 'alarmToneSelect'].forEach((id) => {
       document.getElementById(id).disabled = !status.enabled;
     });
     const { value } = await Preferences.get({ key: 'el_alarm_volume_percent' });
+    const { value: tone } = await Preferences.get({ key: 'el_alarm_tone' });
+    document.getElementById('alarmToneSelect').value = ['standard', 'sirene', 'martinshorn'].includes(tone) ? tone : 'standard';
     const volumeSetting = value ?? '80';
     document.getElementById('alarmVolumeSlider').value = volumeSetting;
     updateAlarmVolumeLabel();
@@ -606,10 +617,20 @@ async function saveAlarmVolume() {
   await updateAlarmStatus();
 }
 
+async function saveAlarmTone() {
+  try {
+    await Preferences.set({ key: 'el_alarm_tone', value: document.getElementById('alarmToneSelect').value });
+  } catch (_) {
+    toast('Alarmton konnte nicht gespeichert werden.');
+  }
+  await updateAlarmStatus();
+}
+
 async function previewAlarmVolume() {
   try {
     const percent = Number(document.getElementById('alarmVolumeSlider').value);
-    const result = await AlarmChannel.previewVolume({ percent });
+    const tone = document.getElementById('alarmToneSelect').value;
+    const result = await AlarmChannel.previewVolume({ percent, tone });
     if (!result.started) toast('Vorschau konnte nicht gestartet werden.');
   } catch (_) {
     toast('Vorschau konnte nicht gestartet werden.');

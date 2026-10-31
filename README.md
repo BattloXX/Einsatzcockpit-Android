@@ -56,7 +56,9 @@ Android App (Capacitor, appId cloud.einsatzleiter.app)
     │      Einsatz-Push still in einer kurzlebigen WebView vor (niedrige
     │      WorkManager-Priorität), damit der PWA-Service-Worker sie für den
     │      Offline-Fall aktuell hält, auch ohne dass der Nutzer sie öffnet
-    ├─ AlarmChannelPlugin → akustischer Alarmkanal (Sirenenton, DND-Bypass;
+    ├─ AlarmChannelPlugin → akustischer Alarmkanal (DND-Bypass;
+    │      nativer Einsatzalarm mit wählbarem Standard-Alarm, Sirene oder
+    │      Martinshorn und Alarmlautstärke in „Über die App“, mit Tonvorschau;
     │      legt den Kanal automatisch neu an, falls der DND-Zugriff erst
     │      nachträglich gewährt wurde — Kanäle sind sonst unveränderlich)
     ├─ SmsGatewayPlugin/-Service → persistente WebSocket-Verbindung, eigener
