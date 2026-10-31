@@ -42,7 +42,28 @@
     <!-- Zugriff wird nur auf Wunsch fuer das Uebergehen von "Nicht stoeren" erteilt. -->
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
+    <!-- Native Sirene und Vollbildalarm -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
     <application>
+
+        <service
+            android:name="cloud.einsatzleiter.smsgatewayplugin.EinsatzAlarmService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false" />
+
+        <activity
+            android:name="cloud.einsatzleiter.smsgatewayplugin.AlarmActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
 
         <activity
             android:name="cloud.einsatzleiter.smsgatewayplugin.KontaktListActivity"
