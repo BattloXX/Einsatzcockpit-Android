@@ -62,29 +62,48 @@ class SmsGatewayPlugin : Plugin() {
 
     // ── Gateway starten ───────────────────────────────────────────────────────
 
+    private fun withLocalPage(call: PluginCall, action: () -> Unit) {
+        // WebView.url nur im UI-Thread lesen; Prüfung und Aktion zusammen ausführen,
+        // ohne blockierendes Warten oder einen nach Navigation veralteten Origin-Cache.
+        bridge.executeOnMainThread {
+            if (!UrlPolicy.isLocalPage(bridge.webView.url, bridge.localUrl)) {
+                call.reject("Nur von der lokalen App-Seite erlaubt")
+            } else {
+                action()
+            }
+        }
+    }
+
     @PluginMethod
     fun startGateway(call: PluginCall) {
-        val url   = call.getString("url")   ?: return call.reject("url erforderlich")
-        val token = call.getString("token") ?: return call.reject("token erforderlich")
+        withLocalPage(call) {
+            val url   = call.getString("url")   ?: return@withLocalPage call.reject("url erforderlich")
+            val token = call.getString("token") ?: return@withLocalPage call.reject("token erforderlich")
+            if (!UrlPolicy.isAllowedRemoteUrl(url)) {
+                return@withLocalPage call.reject("Gateway-URL nicht erlaubt")
+            }
 
-        val intent = Intent(context, SmsGatewayService::class.java).apply {
-            action = SmsGatewayService.ACTION_START
-            putExtra(SmsGatewayService.EXTRA_URL, url.trimEnd('/'))
-            putExtra(SmsGatewayService.EXTRA_TOKEN, token)
+            val intent = Intent(context, SmsGatewayService::class.java).apply {
+                action = SmsGatewayService.ACTION_START
+                putExtra(SmsGatewayService.EXTRA_URL, url.trimEnd('/'))
+                putExtra(SmsGatewayService.EXTRA_TOKEN, token)
+            }
+            context.startForegroundService(intent)
+            call.resolve()
         }
-        context.startForegroundService(intent)
-        call.resolve()
     }
 
     // ── Gateway stoppen ───────────────────────────────────────────────────────
 
     @PluginMethod
     fun stopGateway(call: PluginCall) {
-        val intent = Intent(context, SmsGatewayService::class.java).apply {
-            action = SmsGatewayService.ACTION_STOP
+        withLocalPage(call) {
+            val intent = Intent(context, SmsGatewayService::class.java).apply {
+                action = SmsGatewayService.ACTION_STOP
+            }
+            context.startService(intent)
+            call.resolve()
         }
-        context.startService(intent)
-        call.resolve()
     }
 
     // ── Status abfragen ───────────────────────────────────────────────────────
@@ -107,11 +126,13 @@ class SmsGatewayPlugin : Plugin() {
 
     @PluginMethod
     fun sendTestSms(call: PluginCall) {
-        val to   = call.getString("to")   ?: return call.reject("to erforderlich")
-        val text = call.getString("text") ?: "Test-SMS von Einsatzcockpit"
+        withLocalPage(call) {
+            val to   = call.getString("to")   ?: return@withLocalPage call.reject("to erforderlich")
+            val text = call.getString("text") ?: "Test-SMS von Einsatzcockpit"
 
-        SmsGatewayService.sendDirectSms(context, to, text) { ok, msg ->
-            if (ok) call.resolve() else call.reject(msg)
+            SmsGatewayService.sendDirectSms(context, to, text) { ok, msg ->
+                if (ok) call.resolve() else call.reject(msg)
+            }
         }
     }
 

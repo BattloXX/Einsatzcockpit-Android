@@ -62,6 +62,10 @@ class EinsatzLivePlugin : Plugin() {
     private fun navigateIfPresent(intent: Intent?) {
         val url = intent?.getStringExtra(EinsatzLiveNotifier.EXTRA_EC_URL) ?: return
         intent.removeExtra(EinsatzLiveNotifier.EXTRA_EC_URL)
+        if (!UrlPolicy.isAllowedRemoteUrl(url)) {
+            SmsGatewayService.log("EinsatzLive-URL nicht erlaubt")
+            return
+        }
         bridge.webView.post { bridge.webView.loadUrl(url) }
     }
 }

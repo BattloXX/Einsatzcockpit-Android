@@ -21,6 +21,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
 import cloud.einsatzleiter.nativefiles.NativeFilesPlugin;
+import cloud.einsatzleiter.smsgatewayplugin.UrlPolicy;
 
 public class MainActivity extends BridgeActivity {
     // Gleicher Wert wie DeviceAccessState.EXTRA_RECONNECT im Plugin (Hinweis "Gerätezugang ungültig").
@@ -100,7 +101,8 @@ public class MainActivity extends BridgeActivity {
             public void onCapabilitiesChanged(Network network, NetworkCapabilities capabilities) {
                 if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return;
                 handler.post(() -> {
-                    if (offlinePageVisible && isOfflineUrl(bridge.getWebView().getUrl())) {
+                    if (offlinePageVisible && isOfflineUrl(bridge.getWebView().getUrl())
+                            && UrlPolicy.INSTANCE.isAllowedRemoteUrl(lastAttemptedUrl)) {
                         offlinePageVisible = false;
                         bridge.getWebView().loadUrl(lastAttemptedUrl);
                     }

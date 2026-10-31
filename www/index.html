@@ -465,6 +465,11 @@ async function handleQrResult(raw, Preferences, SmsGateway) {
   try { parsed = new URL(raw); }
   catch (_) { showError('Ungültiger QR-Code.'); return; }
 
+  if (parsed.protocol !== 'https:') {
+    showError('QR-Code muss eine https-Adresse enthalten.');
+    return;
+  }
+
   if (!ALLOWED_HOSTS.includes(parsed.hostname)) {
     showError('QR-Code von unbekanntem Server – abgelehnt.');
     return;
