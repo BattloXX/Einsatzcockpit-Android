@@ -70,7 +70,7 @@ class SmsGatewayService : Service() {
         // und lokal gepufferte, noch nicht bestätigte Empfangs-SMS.
         private const val PREF_RECEIVE_ENABLED = "el_gateway_receive_enabled"
         private const val PREF_INBOX_QUEUE     = "el_gateway_inbox_queue"
-        private const val INBOX_QUEUE_MAX      = 200
+        private val inboundLock = Any()
 
         // ── Zustand (von Plugin abgelesen) ────────────────────────────────────
         @Volatile var isConnected = false
@@ -471,10 +471,15 @@ class SmsGatewayService : Service() {
     private fun registerNetworkCallback() {
         try {
             val cm = getSystemService(ConnectivityManager::class.java)
-            val req = NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .build()
-            cm.registerNetworkCallback(req, networkCallback)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                // Nur das Standardnetz beobachten, damit der Verlust eines anderen Netzes den WebSocket nicht trennt.
+                cm.registerDefaultNetworkCallback(networkCallback)
+            } else {
+                val req = NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build()
+                cm.registerNetworkCallback(req, networkCallback)
+            }
         } catch (_: Exception) {}
     }
 
@@ -740,35 +745,24 @@ class SmsGatewayService : Service() {
 
     private fun saveInboundQueue(arr: JSONArray) {
         getSharedPreferences("CapacitorStorage", MODE_PRIVATE).edit()
-            .putString(PREF_INBOX_QUEUE, arr.toString()).apply()
+            .putString(PREF_INBOX_QUEUE, arr.toString()).commit()
     }
 
     private fun enqueueInboundSms(entry: JSONObject) {
-        val arr = loadInboundQueue()
-        arr.put(entry)
-        // Aelteste Eintraege verwerfen wenn das Limit ueberschritten wird (Speicher begrenzen)
-        val start = maxOf(0, arr.length() - INBOX_QUEUE_MAX)
-        if (start == 0) {
-            saveInboundQueue(arr)
-        } else {
-            val trimmed = JSONArray()
-            for (i in start until arr.length()) trimmed.put(arr.get(i))
-            saveInboundQueue(trimmed)
+        synchronized(inboundLock) {
+            saveInboundQueue(InboundQueue.enqueue(loadInboundQueue(), entry))
         }
     }
 
     private fun removeFromInboundQueue(id: String) {
-        val arr = loadInboundQueue()
-        val kept = JSONArray()
-        for (i in 0 until arr.length()) {
-            val obj = arr.optJSONObject(i) ?: continue
-            if (obj.optString("id") != id) kept.put(obj)
+        synchronized(inboundLock) {
+            saveInboundQueue(InboundQueue.remove(loadInboundQueue(), id))
         }
-        saveInboundQueue(kept)
     }
 
     private fun flushInboundQueue(socket: WebSocket) {
-        val arr = loadInboundQueue()
+        // loadInboundQueue parst eine unabhaengige Kopie; Versand erfolgt ohne Lock.
+        val arr = synchronized(inboundLock) { loadInboundQueue() }
         for (i in 0 until arr.length()) {
             val obj = arr.optJSONObject(i) ?: continue
             val payload = JSONObject(obj.toString()).apply { put("type", "sms.received") }

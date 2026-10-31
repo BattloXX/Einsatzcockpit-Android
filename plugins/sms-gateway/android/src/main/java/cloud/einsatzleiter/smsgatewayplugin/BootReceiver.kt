@@ -3,6 +3,7 @@ package cloud.einsatzleiter.smsgatewayplugin
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 
 /**
  * Startet das dauerhaft konfigurierte SMS-Gateway nach einem Neustart.
@@ -14,8 +15,7 @@ class BootReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         if (action !in listOf(
                 Intent.ACTION_BOOT_COMPLETED,
-                Intent.ACTION_MY_PACKAGE_REPLACED,
-                "android.intent.action.LOCKED_BOOT_COMPLETED")) return
+                Intent.ACTION_MY_PACKAGE_REPLACED)) return
 
         if (action == Intent.ACTION_MY_PACKAGE_REPLACED || action == Intent.ACTION_BOOT_COMPLETED) {
             try {
@@ -40,15 +40,28 @@ class BootReceiver : BroadcastReceiver() {
                 putExtra(SmsGatewayService.EXTRA_URL,   gwUrl)
                 putExtra(SmsGatewayService.EXTRA_TOKEN, gwToken)
             }
-            context.startForegroundService(serviceIntent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent)
+                } else {
+                    context.startService(serviceIntent)
+                }
+            } catch (e: Exception) {
+                SmsGatewayService.log("Gateway-Start nach Boot/Update fehlgeschlagen (${e.javaClass.simpleName})")
+            }
             shouldLaunch = true
         }
 
         if (shouldLaunch) {
-            context.packageManager
-                .getLaunchIntentForPackage(context.packageName)
-                ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-                ?.let { context.startActivity(it) }
+            // Android 10+ kann den Activity-Start aus dem Hintergrund blockieren.
+            try {
+                context.packageManager
+                    .getLaunchIntentForPackage(context.packageName)
+                    ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                    ?.let { context.startActivity(it) }
+            } catch (e: Exception) {
+                SmsGatewayService.log("App-Start nach Boot/Update fehlgeschlagen (${e.javaClass.simpleName})")
+            }
         }
     }
 }
