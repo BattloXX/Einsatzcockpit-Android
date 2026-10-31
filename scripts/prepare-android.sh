@@ -121,6 +121,28 @@ if 'android:autoVerify="true"' not in content:
         raise SystemExit("MainActivity fuer App Links nicht eindeutig gefunden")
     content = content.replace("</activity>", app_link + "        </activity>", 1)
 
+# Pro FCM-Intent darf nur EIN Service registriert sein, sonst stellt Firebase an den
+# zuerst gelisteten zu. Capacitors MessagingService stand im gemergten Manifest vor
+# EinsatzFirebaseMessagingService -> Data-only-Nachrichten (nativer Alarm, Wake,
+# Zustellbestaetigung) kamen nie bei uns an. tools:node="remove" wirkt nur im
+# App-Manifest zuverlaessig, nicht im Manifest einer Bibliothek.
+if "xmlns:tools=" not in content:
+    content = content.replace(
+        'xmlns:android="http://schemas.android.com/apk/res/android"',
+        'xmlns:android="http://schemas.android.com/apk/res/android"\n    xmlns:tools="http://schemas.android.com/tools"',
+        1,
+    )
+capacitor_fcm = (
+    '        <service\n'
+    '            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"\n'
+    '            tools:node="remove" />\n'
+)
+if "com.capacitorjs.plugins.pushnotifications.MessagingService" not in content:
+    if content.count("</application>") != 1:
+        raise SystemExit("application-Element fuer FCM-Service-Entfernung nicht eindeutig gefunden")
+    content = content.replace("</application>", capacitor_fcm + "    </application>", 1)
+    added.append("remove Capacitor MessagingService")
+
 with open(path, "w", encoding="utf-8") as f:
     f.write(content)
 
