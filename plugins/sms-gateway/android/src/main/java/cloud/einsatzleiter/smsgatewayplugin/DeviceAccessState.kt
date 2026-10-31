@@ -31,8 +31,8 @@ object DeviceAccessState {
     const val EXTRA_RECONNECT = "cloud.einsatzleiter.smsgatewayplugin.EXTRA_RECONNECT"
 
     private const val CHANNEL_ID = "ec_device_access"
-    private const val NOTIFICATION_ID = 7305
-    private const val REQUEST_CODE = 7305
+    private const val NOTIFICATION_ID = 7307
+    private const val REQUEST_CODE = 7307
     private val FINAL_CODES = setOf("device_revoked", "device_unknown", "user_inactive")
 
     private fun prefs(context: Context) =
