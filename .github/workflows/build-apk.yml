@@ -32,7 +32,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Android-Projekt vorbereiten (cap add/sync, SDK-Patch, Firebase, Manifest)
         env:
@@ -92,6 +92,13 @@ jobs:
             ./gradlew assembleDebug
             cp app/build/outputs/apk/debug/app-debug.apk ci-artifacts/app-debug-standard.apk
           fi
+
+      - name: Unit-Tests (Plugins und Startseite)
+        working-directory: android
+        run: |
+          # Nach dem Standard-Build, weil erst dort auto_update.xml fuer das Plugin-Modul existiert.
+          ./gradlew :einsatzleiter-sms-gateway-plugin:testDebugUnitTest :native-files:testDebugUnitTest
+          node ../scripts/offline-page.test.mjs
 
       - name: Build Auto-Update-APK
         working-directory: android
