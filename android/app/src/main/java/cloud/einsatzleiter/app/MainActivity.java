@@ -17,6 +17,8 @@ import android.webkit.WebView;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.widget.Toast;
+import androidx.activity.OnBackPressedCallback;
+import cloud.einsatzleiter.smsgatewayplugin.SafeWindowInsets;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
@@ -52,6 +54,17 @@ public class MainActivity extends BridgeActivity {
         installOfflineHandling();
         installPullToRefresh();
         installDownloadListener();
+        SafeWindowInsets.install(getWindow());
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (bridge != null && bridge.getWebView() != null && bridge.getWebView().canGoBack()) {
+                    bridge.getWebView().goBack();
+                } else {
+                    moveTaskToBack(true);
+                }
+            }
+        });
     }
 
     private String offlineUrl() {

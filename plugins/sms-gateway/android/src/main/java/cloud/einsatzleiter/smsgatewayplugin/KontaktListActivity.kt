@@ -41,6 +41,7 @@ class KontaktListActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityKontaktListBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        SafeWindowInsets.install(window)
         supportActionBar?.title = "Kontakte offline"
         database = KontaktDatabase.get(applicationContext)
 
