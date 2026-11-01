@@ -14,17 +14,23 @@ apply plugin: 'kotlin-kapt'
 
 android {
     namespace "cloud.einsatzleiter.smsgatewayplugin"
-    compileSdk 36
+    compileSdk (rootProject.ext.has('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 36)
 
     buildFeatures {
         viewBinding true
     }
 
     defaultConfig {
-        minSdk 23
-        targetSdk 35
+        minSdk (rootProject.ext.has('minSdkVersion') ? rootProject.ext.minSdkVersion : 24)
+        targetSdk (rootProject.ext.has('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 35)
         versionCode 1
         versionName "1.0"
+    }
+
+    // CI generates an overlay under build/; the versioned default stays false.
+    if (project.findProperty('autoUpdate') == 'true') {
+        sourceSets.debug.res.srcDir layout.buildDirectory.dir('generated/auto-update-res')
+        sourceSets.release.res.srcDir layout.buildDirectory.dir('generated/auto-update-res')
     }
 
     buildTypes {

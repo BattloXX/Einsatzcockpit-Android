@@ -3,7 +3,7 @@
 App-local Capacitor 7 Java plugin, called by the remote PWA through
 `window.Capacitor.Plugins.NativeFiles`. No npm dependency or PWA changes.
 Sources live in `plugins/native-files/android`; `scripts/prepare-android.sh`
-wires the Gradle module into the generated Android project. `scripts/MainActivity.java`
+wires the Gradle module into the generated Android project. `android/app/src/main/java/cloud/einsatzleiter/app/MainActivity.java`
 registers the plugin before bridge creation and installs the WebView DownloadListener.
 
 ## Contract
