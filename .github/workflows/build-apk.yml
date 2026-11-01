@@ -237,7 +237,7 @@ jobs:
           fi
 
       - name: Upload Standard-APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: einsatzcockpit-v${{ env.APP_VERSION }}
           path: |
@@ -246,7 +246,7 @@ jobs:
             android/ci-artifacts/einsatzcockpit-v${{ env.APP_VERSION }}-debug.apk
 
       - name: Upload Auto-Update-APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: einsatzcockpit-autoupdate-v${{ env.APP_VERSION }}
           path: |
