@@ -41,8 +41,8 @@ class KontaktSyncEngine(
         try {
             OfflineCacheStatusStore.logActivity(appContext, "Kontakt-Sync verbindet mit $baseUrl")
             val status = db.syncStatusDao().get()
-            if (status?.cursor == null || status?.orgId == null || status?.schemaVersion == null ||
-                status?.baseUrl != baseUrl) {
+            if (status?.cursor == null || status.orgId == null || status.schemaVersion == null ||
+                status.baseUrl != baseUrl) {
                 syncSnapshot(db, baseUrl, token, status)
             } else {
                 syncDelta(db, baseUrl, token, requireNotNull(status))

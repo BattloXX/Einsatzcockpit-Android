@@ -1,4 +1,6 @@
 ext {
+    kotlinVersion = '2.4.21'
+    kspVersion = '2.3.7'
     minSdkVersion = 24
     compileSdkVersion = 36
     targetSdkVersion = 35

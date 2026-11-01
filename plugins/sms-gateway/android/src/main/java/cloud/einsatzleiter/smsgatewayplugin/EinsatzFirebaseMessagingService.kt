@@ -125,7 +125,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
             )
         }
 
-        if (isIncidentPush && incidentPath != null) {
+        if (isIncidentPush) {
             refreshIncidentWidgetFromPush(incidentPath, data)
         }
     }

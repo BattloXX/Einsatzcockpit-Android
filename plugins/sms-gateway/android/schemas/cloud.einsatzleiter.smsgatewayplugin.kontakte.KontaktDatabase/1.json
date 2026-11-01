@@ -1,0 +1,316 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "8d047439c3b45a539dd9efffd5179053",
+    "entities": [
+      {
+        "tableName": "kontakte",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `typ` TEXT NOT NULL, `anzeigename` TEXT NOT NULL, `vorname` TEXT, `nachname` TEXT, `funktion` TEXT, `organisation` TEXT, `email` TEXT, `erreichbarkeit` TEXT, `notizen` TEXT, `aktiv` INTEGER NOT NULL, `archiviert` INTEGER NOT NULL, `version` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "typ",
+            "columnName": "typ",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "anzeigename",
+            "columnName": "anzeigename",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vorname",
+            "columnName": "vorname",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "nachname",
+            "columnName": "nachname",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "funktion",
+            "columnName": "funktion",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "organisation",
+            "columnName": "organisation",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "email",
+            "columnName": "email",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "erreichbarkeit",
+            "columnName": "erreichbarkeit",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "notizen",
+            "columnName": "notizen",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "aktiv",
+            "columnName": "aktiv",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "archiviert",
+            "columnName": "archiviert",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "version",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "kontakt_telefone",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `kontakt_id` INTEGER NOT NULL, `nummer` TEXT NOT NULL, `nummer_normalisiert` TEXT NOT NULL, `label` TEXT, `sort` INTEGER NOT NULL, `bevorzugt` INTEGER NOT NULL, `sms_eignung` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`kontakt_id`) REFERENCES `kontakte`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kontaktId",
+            "columnName": "kontakt_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nummer",
+            "columnName": "nummer",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nummerNormalisiert",
+            "columnName": "nummer_normalisiert",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sort",
+            "columnName": "sort",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bevorzugt",
+            "columnName": "bevorzugt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "smsEignung",
+            "columnName": "sms_eignung",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_kontakt_telefone_kontakt_id",
+            "unique": false,
+            "columnNames": [
+              "kontakt_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_kontakt_telefone_kontakt_id` ON `${TABLE_NAME}` (`kontakt_id`)"
+          },
+          {
+            "name": "index_kontakt_telefone_nummer_normalisiert",
+            "unique": false,
+            "columnNames": [
+              "nummer_normalisiert"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_kontakt_telefone_nummer_normalisiert` ON `${TABLE_NAME}` (`nummer_normalisiert`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "kontakte",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "kontakt_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "kontakt_zuordnungen",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `kontakt_id` INTEGER NOT NULL, `objekt_id` INTEGER NOT NULL, `rolle` TEXT NOT NULL, `sort` INTEGER NOT NULL, `erreichbarkeit` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`kontakt_id`) REFERENCES `kontakte`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kontaktId",
+            "columnName": "kontakt_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "objektId",
+            "columnName": "objekt_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rolle",
+            "columnName": "rolle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sort",
+            "columnName": "sort",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "erreichbarkeit",
+            "columnName": "erreichbarkeit",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_kontakt_zuordnungen_kontakt_id",
+            "unique": false,
+            "columnNames": [
+              "kontakt_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_kontakt_zuordnungen_kontakt_id` ON `${TABLE_NAME}` (`kontakt_id`)"
+          },
+          {
+            "name": "index_kontakt_zuordnungen_objekt_id",
+            "unique": false,
+            "columnNames": [
+              "objekt_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_kontakt_zuordnungen_objekt_id` ON `${TABLE_NAME}` (`objekt_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "kontakte",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "kontakt_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "kontakt_sync_status",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `cursor` INTEGER, `schema_version` INTEGER, `org_id` INTEGER, `base_url` TEXT, `last_success_at_ms` INTEGER, `last_error` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cursor",
+            "columnName": "cursor",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schema_version",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "orgId",
+            "columnName": "org_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "baseUrl",
+            "columnName": "base_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastSuccessAtMs",
+            "columnName": "last_success_at_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "last_error",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8d047439c3b45a539dd9efffd5179053')"
+    ]
+  }
+}
