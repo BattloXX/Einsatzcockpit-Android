@@ -4,12 +4,18 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Action-Majors (z. B. upload-artifact, action-gh-release) werden manuell geprüft.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
     # Capacitor-Majors werden manuell migriert, auch bei Zusatzplugins.
     ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "@capacitor/*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "@capacitor-community/*"
