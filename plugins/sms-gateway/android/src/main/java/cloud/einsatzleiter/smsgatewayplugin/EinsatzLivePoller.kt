@@ -239,6 +239,7 @@ class EinsatzLivePoller(
             val oldId = prefs.getString(PREF_INCIDENT_ID, null)
             if (oldId != incident.id.toString()) {
                 prefs.edit().remove(PREF_DISMISSED_INCIDENT_ID).apply()
+                LocationReport.runNow(context, "incident")
             }
             currentState = incident
             prefs.edit()

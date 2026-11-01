@@ -43,6 +43,8 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        // Ein Push weckt die App auch nach Tagen: Standortplanung sicherstellen (idempotent).
+        LocationReport.ensureScheduled(applicationContext)
         val data = message.data
         SmsGatewayService.log("FCM empfangen: alarm=${data["alarm"]} channel=${data["channel_id"]} test=${data["test"]}")
         val rawUrl = data["url"]

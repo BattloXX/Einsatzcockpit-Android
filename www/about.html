@@ -418,6 +418,13 @@
     <p class="alarm-note">Einstellungen werden nur in der App geändert. In der Zentrale sind sie einsehbar; Fehler werden dorthin gemeldet.</p>
     <p id="diagnoseSendStatus" class="alarm-note" role="status"></p>
   </div>
+  <div class="card" id="standortCard">
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-file-text"/></svg> Standortmeldung</div>
+    <p id="standortStatus" aria-live="polite">Standortmeldung: wird geladen</p>
+    <p id="standortHinweis" class="alarm-note"></p>
+    <button type="button" class="btn-primary" id="btnSendStandort" onclick="sendStandortJetzt()" style="margin-top:12px;">Standort jetzt melden</button>
+    <p class="alarm-note">Registrierte Einheitengeräte melden ihren Standort auch ohne Einsatz mindestens alle 24 Stunden an die Zentrale (Android entscheidet über den genauen Zeitpunkt).</p>
+  </div>
   <div class="card" id="nativeLogCard">
     <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-file-text"/></svg> Diagnoseprotokoll</div>
     <p style="font-size:13px;color:var(--muted);">Letzte native Ereignisse (Alarm, Push, Live-Status, Updates). Keine Zugangsdaten.</p>
@@ -519,8 +526,41 @@ async function updateDeviceInfo() {
     }
     document.getElementById('diagnoseLastSent').textContent = 'Zuletzt an Zentrale gesendet: ' +
       (info.last_sent_at ? new Date(info.last_sent_at).toLocaleString('de-AT') : 'noch nie');
+    standortAnzeigen(info.standort);
   } catch (_) {
     document.getElementById('deviceProperties').textContent = 'Geräteinformationen derzeit nicht verfügbar.';
+  }
+}
+
+function standortAnzeigen(s) {
+  const status = document.getElementById('standortStatus');
+  const hinweis = document.getElementById('standortHinweis');
+  if (!s) { status.textContent = 'Standortmeldung: nicht verfügbar'; return; }
+  const zeit = (v) => v ? new Date(v).toLocaleString('de-AT') : 'noch nie';
+  status.textContent = 'Letzte Messung: ' + zeit(s.letzte_messung_at) + ' · Zuletzt gemeldet: ' + zeit(s.letzte_meldung_at);
+  const texte = {
+    permission_denied: 'Standortberechtigung fehlt. Bitte in den Android-Einstellungen erlauben.',
+    location_disabled: 'Die Ortung ist am Gerät ausgeschaltet.',
+    no_fix: 'Es konnte keine Position bestimmt werden.',
+    stale_fix: 'Nur eine veraltete Position verfügbar.',
+    mock_location: 'Simulierte Position wird nicht gemeldet.',
+  };
+  let text = texte[s.status] || '';
+  if (!s.berechtigung) text = texte.permission_denied;
+  else if (!s.hintergrund) text = (text ? text + ' ' : '') + 'Für Meldungen im Hintergrund bitte „Immer zulassen“ für den Standort wählen.';
+  if (s.fehler) text = (text ? text + ' ' : '') + 'Letzter Fehler: ' + s.fehler;
+  hinweis.textContent = text;
+}
+
+async function sendStandortJetzt() {
+  const hinweis = document.getElementById('standortHinweis');
+  try {
+    const SmsGateway = window.Capacitor?.Plugins?.SmsGateway;
+    if (!SmsGateway?.sendLocationNow) throw new Error('Bridge unavailable');
+    const r = await SmsGateway.sendLocationNow();
+    hinweis.textContent = r.queued ? 'Standortmeldung wird gesendet.' : 'Zuletzt vor wenigen Minuten angefordert.';
+  } catch (_) {
+    hinweis.textContent = 'Standortmeldung konnte nicht angefordert werden.';
   }
 }
 

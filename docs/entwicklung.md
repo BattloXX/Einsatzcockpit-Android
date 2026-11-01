@@ -33,3 +33,18 @@ kurzem technischem Text instrumentieren; keine Nutzdaten übergeben.
 Tests: reine JUnit-Tests für Schema/Drosselung, Robolectric mit SDK 35 für
 Systemabfragen und persistente Fehler. Versand/Auth und Gerätebesonderheiten
 zusätzlich auf einem echten Gerät gegen die Zentrale prüfen.
+
+## Standortmeldung (auch ohne Einsatz)
+
+- `LocationReportWorker` (WorkManager, alle 6 h mit 2 h Flex, Netzwerk-Constraint) bestimmt per Fused Location Provider
+  (`PRIORITY_BALANCED_POWER_ACCURACY`, 20 s Timeout, Fallback letzte bekannte Position) einen Standort und meldet ihn an
+  `POST /api/v1/device/location` mit Messzeit (`measured_at`), Quelle und Status. Positionen aelter als 24 h oder simulierte
+  Positionen werden nicht gesendet; stattdessen geht ein Status (`stale_fix`, `mock_location`, `permission_denied`,
+  `location_disabled`, `no_fix`) an die Zentrale.
+- Geplant wird idempotent (`LocationReport.ensureScheduled`, KEEP) beim App-Start, nach Boot/App-Update und bei jedem Push.
+  Einmalige Meldung bei Einsatzbeginn (Poller) und per Knopf in Einstellungen > Diagnose. Mindestabstand zwischen zwei
+  erfolgreichen Meldungen 5 h; ohne Geraetetoken keine Ortung.
+- Hintergrund-Standort (`ACCESS_BACKGROUND_LOCATION`, "Immer zulassen") ist fuer neue Messungen ohne geoeffnete App noetig;
+  fehlt er, nutzt der Worker die letzte bekannte Position und die Einstellungsseite weist darauf hin.
+- Live-Tracking im Einsatz bleibt beim Background-Geolocation-Watcher (WebView, `native-bridge.js`).
+- Tests: `LocationReportLogicTest`.
