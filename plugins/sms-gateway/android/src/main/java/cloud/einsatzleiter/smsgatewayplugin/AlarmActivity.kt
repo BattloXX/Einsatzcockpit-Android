@@ -14,6 +14,9 @@ import android.widget.Button
 import android.widget.Chronometer
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import java.lang.ref.WeakReference
 
 /** Alarmanzeige ohne WebView, auch ueber dem Sperrbildschirm. */
@@ -31,10 +34,16 @@ class AlarmActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
         }
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        window.statusBarColor = Color.rgb(183, 28, 28)
-        window.navigationBarColor = Color.rgb(183, 28, 28)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_einsatz_alarm)
+        SafeWindowInsets.install(window)
+        window.decorView.setBackgroundColor(Color.rgb(183, 28, 28))
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.statusBars())
+        }
         findViewById<Button>(R.id.alarm_acknowledge).setOnClickListener { acknowledge() }
         findViewById<Button>(R.id.alarm_open).setOnClickListener { openIncident() }
         showAlarm()

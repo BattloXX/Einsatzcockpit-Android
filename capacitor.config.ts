@@ -21,6 +21,13 @@ const config: CapacitorConfig = {
     },
   },
   plugins: {
+    // MainActivity schützt die gesamte native View-Hierarchie, auch die Remote-PWA.
+    SystemBars: {
+      insetsHandling: 'disable',
+    },
+    App: {
+      disableBackButtonHandler: true, // MainActivity: WebView zurück, sonst App verstecken.
+    },
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },

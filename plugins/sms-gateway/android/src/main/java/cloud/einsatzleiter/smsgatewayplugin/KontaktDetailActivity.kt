@@ -27,6 +27,7 @@ class KontaktDetailActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityKontaktDetailBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        SafeWindowInsets.install(window)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         val kontaktId = intent.getLongExtra(KontaktListActivity.EXTRA_KONTAKT_ID, NO_KONTAKT_ID)

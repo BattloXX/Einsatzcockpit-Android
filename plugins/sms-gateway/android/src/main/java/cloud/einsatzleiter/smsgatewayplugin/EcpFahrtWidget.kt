@@ -67,6 +67,7 @@ class EcpFahrtWidgetConfigureActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SafeWindowInsets.install(window)
         setResult(RESULT_CANCELED, Intent())
         appWidgetId = intent?.extras?.getInt(
             AppWidgetManager.EXTRA_APPWIDGET_ID,
