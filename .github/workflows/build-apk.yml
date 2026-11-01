@@ -71,6 +71,7 @@ jobs:
         run: |
           ./gradlew :einsatzleiter-sms-gateway-plugin:testDebugUnitTest :native-files:testDebugUnitTest
           node ../scripts/offline-page.test.mjs
+          node ../scripts/about-page.test.mjs
 
       - name: Build Standard-APK
         working-directory: android

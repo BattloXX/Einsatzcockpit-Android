@@ -82,7 +82,7 @@
     #smsLog, #receivedLog { list-style: none; display: flex; flex-direction: column; gap: 6px; }
     #smsLog li, #receivedLog li { font-size: .83rem; display: flex; align-items: center; gap: 8px; }
     #smsLog .log-time, #receivedLog .log-time { color: var(--faint); flex-shrink: 0; font-family: var(--mono); font-size: .74rem; }
-    #smsLog .log-num  { color: var(--text); }
+    #smsLog .log-num  { color: var(--text); display:inline-flex; align-items:center; gap:4px; }
     #smsLog .log-ok   { color: var(--green); margin-left: auto; }
     #receivedLog .log-num { color: var(--text); flex-shrink: 0; }
     #receivedLog .log-preview { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -98,7 +98,7 @@
     .badge-soft.on { background: rgba(126,231,160,.14); color: var(--green); border-color: rgba(126,231,160,.4); }
 
     /* ── Verbindungslog ──────────────────────────────────────────────────── */
-    .conn-log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .conn-log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap:wrap; gap:8px; }
     .conn-log-actions { display: flex; gap: 6px; }
     .btn-sm { font-size: .72rem !important; padding: 5px 11px !important; }
     #connLog {
@@ -112,7 +112,7 @@
     /* ── Inputs / Buttons ────────────────────────────────────────────────── */
     .input-row { display: flex; gap: 8px; align-items: center; }
     input[type="tel"] {
-      flex: 1; background: var(--s0); border: 1px solid var(--border); border-radius: 8px;
+      flex: 1; min-width:0; background: var(--s0); border: 1px solid var(--border); border-radius: 8px;
       color: var(--text); font-size: .9rem; padding: 10px 12px; outline: none; font-family: var(--mono);
     }
     input[type="tel"]:focus { border-color: var(--primary-c); }
@@ -154,12 +154,89 @@
       pointer-events: none; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.4);
     }
     #toast.show { transform: translateX(-50%) translateY(0); }
+
+    .i { width:20px; height:20px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; vertical-align:middle; }
+    button, a.btn, .icon-label { display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+    .card-label > .i { margin-right:6px; }
+    button:focus-visible, a.btn:focus-visible, select:focus-visible, input:focus-visible { outline:2px solid var(--primary); outline-offset:3px; }
+    .toggle input:focus-visible + .toggle-slider { outline:2px solid var(--primary); outline-offset:3px; }
+    @media (prefers-reduced-motion:reduce) {
+      *, *::before, *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+    }
+    .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
   </style>
 </head>
 <body>
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <!-- Tabler Icons v3.50.0, Copyright (c) Paweł Kuna, MIT License: https://github.com/tabler/tabler-icons/blob/v3.50.0/LICENSE -->
+    <symbol id="i-alert-triangle" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M12 9v4" />
+  <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" />
+  <path d="M12 16h.01" /></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M5 12l14 0" />
+  <path d="M13 18l6 -6" />
+  <path d="M13 6l6 6" /></symbol>
+    <symbol id="i-battery-charging" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M16 7h1a2 2 0 0 1 2 2v.5a.5 .5 0 0 0 .5 .5a.5 .5 0 0 1 .5 .5v3a.5 .5 0 0 1 -.5 .5a.5 .5 0 0 0 -.5 .5v.5a2 2 0 0 1 -2 2h-2" />
+  <path d="M8 7h-2a2 2 0 0 0 -2 2v6a2 2 0 0 0 2 2h1" />
+  <path d="M12 8l-2 4h3l-2 4" /></symbol>
+    <symbol id="i-broadcast" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M18.364 19.364a9 9 0 1 0 -12.728 0" />
+  <path d="M15.536 16.536a5 5 0 1 0 -7.072 0" />
+  <path d="M11 13a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M5 12l5 5l10 -10" /></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" />
+  <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></symbol>
+    <symbol id="i-device-desktop" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10" />
+  <path d="M7 20h10" />
+  <path d="M9 16v4" />
+  <path d="M15 16v4" /></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
+  <path d="M7 11l5 5l5 -5" />
+  <path d="M12 4l0 12" /></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12" />
+  <path d="M4 13h3l3 3h4l3 -3h3" /></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M3 7a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10" />
+  <path d="M3 7l9 6l9 -6" /></symbol>
+    <symbol id="i-puzzle" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M4 7h3a1 1 0 0 0 1 -1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0 -1 1v3a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-1a2 2 0 0 0 -4 0v1a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1h1a2 2 0 0 0 0 -4h-1a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1" /></symbol>
+    <symbol id="i-qrcode" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M4 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />
+  <path d="M7 17l0 .01" />
+  <path d="M14 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />
+  <path d="M7 7l0 .01" />
+  <path d="M4 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />
+  <path d="M17 7l0 .01" />
+  <path d="M14 14l3 0" />
+  <path d="M20 14l0 .01" />
+  <path d="M14 14l0 3" />
+  <path d="M14 20l3 0" />
+  <path d="M17 17l3 0" />
+  <path d="M20 17l0 3" /></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+  <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M10 14l11 -11" />
+  <path d="M21 3l-6.5 18a.55 .55 0 0 1 -1 0l-3.5 -7l-7 -3.5a.55 .55 0 0 1 0 -1l18 -6.5" /></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065" />
+  <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
+  <path d="M7 9l5 -5l5 5" />
+  <path d="M12 4l0 12" /></symbol>
+  </svg>
 
   <div class="header">
-    <div class="header-icon">📡</div>
+    <div class="header-icon"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-broadcast"/></svg></div>
     <div>
       <div class="header-title">SMS-Gateway</div>
       <div class="header-sub" id="headerSub">einsatzcockpit.com</div>
@@ -182,7 +259,7 @@
 
   <!-- SMS-Log -->
   <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
-    <div class="card-label">📤 Letzte SMS-Aufträge</div>
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-upload"/></svg> Letzte SMS-Aufträge</div>
     <ul id="smsLog" style="overflow-y:auto;flex:1;">
       <li><div class="log-empty">Noch keine SMS versendet.</div></li>
     </ul>
@@ -190,16 +267,16 @@
 
   <!-- SMS-Empfang: Berechtigung anfordern (nur sichtbar wenn Server-seitig aktiviert) -->
   <div class="card card-warning" id="receivePermissionCard" style="display:none;">
-    <div class="card-label">📥 SMS-Empfang aktiviert – Berechtigung fehlt</div>
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-inbox"/></svg> SMS-Empfang aktiviert – Berechtigung fehlt</div>
     <p>Der Server hat SMS-Empfang für diese Organisation aktiviert. Bitte die Berechtigung
       erteilen, damit eingehende SMS erkannt und weitergeleitet werden.</p>
-    <button class="btn-primary" onclick="requestReceivePermission()">SMS-Empfang erlauben</button>
+    <button class="btn-primary" onclick="requestReceivePermission()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-inbox"/></svg><span class="btn-text">SMS-Empfang erlauben</span></button>
   </div>
 
   <!-- Empfangene SMS -->
   <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
     <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
-      <span>📥 Empfangene SMS</span>
+      <span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-inbox"/></svg> Empfangene SMS</span>
       <span class="badge-soft" id="receiveStatusBadge">Empfang aus</span>
     </div>
     <ul id="receivedLog" style="overflow-y:auto;flex:1;">
@@ -209,29 +286,29 @@
 
   <!-- Test-SMS -->
   <div class="card">
-    <div class="card-label">✉️ Test-SMS</div>
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-mail"/></svg> Test-SMS</div>
     <div class="input-row">
       <input type="tel" id="testTo" placeholder="+43664…" autocomplete="off">
-      <button class="btn-primary" id="btnSend" onclick="sendTestSms()">Senden</button>
+      <button class="btn-primary" id="btnSend" onclick="sendTestSms()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-send"/></svg><span class="btn-text">Senden</span></button>
     </div>
   </div>
 
   <!-- Akku-Optimierung-Warnung (wird ausgeblendet sobald Optimierung deaktiviert) -->
   <div class="card card-warning" id="batteryWarning" style="display:none;">
-    <div class="card-label">⚠ Akku-Optimierung aktiv – Verbindung gefährdet</div>
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-alert-triangle"/></svg> Akku-Optimierung aktiv – Verbindung gefährdet</div>
     <p><strong>Zwingend für den Dauerbetrieb:</strong> Solange die Akku-Optimierung aktiv ist, kappt Android (Doze) die Gateway-Verbindung sobald das Gerät länger ruht – SMS werden dann nicht zugestellt. Bitte jetzt deaktivieren.</p>
     <p style="margin-top:6px;">Bei Xiaomi/MIUI, Huawei, Samsung oder OnePlus zusätzlich <strong>„Autostart"</strong> erlauben und in den App-Einstellungen <strong>„keine Akku-Einschränkungen"</strong> wählen.</p>
-    <button class="btn-primary" onclick="requestBatteryOpt()">Akku-Optimierung deaktivieren</button>
+    <button class="btn-primary" onclick="requestBatteryOpt()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-battery-charging"/></svg><span class="btn-text">Akku-Optimierung deaktivieren</span></button>
   </div>
 
   <!-- Aktionen -->
   <div class="action-row">
-    <button class="btn-ghost" onclick="rescan()">🔲 Neu konfigurieren (QR)</button>
+    <button class="btn-ghost" onclick="rescan()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-qrcode"/></svg><span class="btn-text">Neu konfigurieren (QR)</span></button>
   </div>
 
   <!-- App-Version / Update -->
   <div class="card" id="updateCard">
-    <div class="card-label">🧩 App-Version</div>
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-puzzle"/></svg> App-Version</div>
     <div class="version-row">
       <span class="version-label">Installiert</span>
       <span class="version-value" id="installedVersion">–</span>
@@ -248,15 +325,15 @@
       </select>
     </div>
     <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
-      <button class="btn-ghost" style="flex:1;min-width:150px;" id="btnCheckUpdate" onclick="manualUpdateCheck()">🔄 Auf Update prüfen</button>
+      <button class="btn-ghost" style="flex:1;min-width:150px;" id="btnCheckUpdate" onclick="manualUpdateCheck()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"/></svg><span class="btn-text">Auf Update prüfen</span></button>
     </div>
     <div id="updateBtnRow" style="margin-top:10px;display:none;">
-      <button class="btn-primary" style="width:100%;" onclick="downloadApk()">⬇ Update herunterladen</button>
+      <button class="btn-primary" style="width:100%;" onclick="downloadApk()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-download"/></svg><span class="btn-text">Update herunterladen</span></button>
     </div>
   </div>
 
   <div class="card" id="autoUpdateCard" style="display:none;">
-    <div class="card-label">⚙️ Auto-Update</div>
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg> Auto-Update</div>
     <div class="version-row">
       <span class="version-label">Letzter Check</span>
       <span class="version-value" id="autoUpdateChecked">Noch nicht geprüft</span>
@@ -275,7 +352,7 @@
     </div>
     <div id="autoUpdatePermission" style="display:none;margin-top:10px;">
       <p>Für automatische Updates bitte „Unbekannte Apps installieren“ für Einsatzcockpit erlauben.</p>
-      <button class="btn-primary" onclick="openAutoUpdateInstallSettings()">Installation erlauben</button>
+      <button class="btn-primary" onclick="openAutoUpdateInstallSettings()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg><span class="btn-text">Installation erlauben</span></button>
     </div>
     <p id="autoUpdateError" style="display:none;font-size:.82rem;color:var(--red);margin-top:10px;"></p>
   </div>
@@ -283,10 +360,10 @@
   <!-- Verbindungslog -->
   <div class="card">
     <div class="conn-log-header">
-      <div class="card-label" style="margin:0">🖥 Verbindungslog</div>
+      <div class="card-label" style="margin:0"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-device-desktop"/></svg> Verbindungslog</div>
       <div class="conn-log-actions">
-        <button class="btn-ghost btn-sm" onclick="copyLog()">Kopieren</button>
-        <button class="btn-ghost btn-sm" onclick="downloadLog()">↓ Herunterladen</button>
+        <button class="btn-ghost btn-sm" onclick="copyLog()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg><span class="btn-text">Kopieren</span></button>
+        <button class="btn-ghost btn-sm" onclick="downloadLog()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-download"/></svg><span class="btn-text">Herunterladen</span></button>
       </div>
     </div>
     <div id="connLog"></div>
@@ -483,7 +560,7 @@ async function requestReceivePermission() {
       receiveEnabled: status.receiveEnabled,
       receivePermissionGranted: status.receivePermissionGranted,
     });
-    if (granted) toast('✓ SMS-Empfang aktiviert');
+    if (granted) toast('SMS-Empfang aktiviert');
     else toast('Berechtigung verweigert – bitte manuell in den App-Einstellungen aktivieren.', 4000);
   } catch (e) {
     toast('Fehler: ' + (e.message || e));
@@ -540,8 +617,10 @@ function renderLog() {
     const num  = document.createElement('span');
     const ok   = document.createElement('span');
     time.className = 'log-time'; time.textContent = e.time;
-    num.className  = 'log-num';  num.textContent  = '→ ' + e.to;
-    ok.className   = 'log-ok';   ok.textContent   = '✓';
+    num.className  = 'log-num';
+    num.innerHTML = '<svg class="i" aria-hidden="true" focusable="false"><use href="#i-arrow-right"/></svg>';
+    num.appendChild(document.createTextNode(e.to));
+    ok.className   = 'log-ok';   ok.innerHTML = '<svg class="i" aria-hidden="true" focusable="false"><use href="#i-check"/></svg><span class="sr-only">Gesendet</span>';
     li.appendChild(time); li.appendChild(num); li.appendChild(ok);
     ul.appendChild(li);
   }
@@ -567,24 +646,25 @@ async function sendTestSms() {
   const btn = document.getElementById('btnSend');
   if (btn.disabled) return;
   btn.disabled = true;
-  btn.textContent = 'SMS 0 von 1 versendet…';
+  const label = btn.querySelector('.btn-text');
+  label.textContent = 'SMS 0 von 1 versendet…';
 
   try {
     await SmsGateway.sendTestSms({ to, text: 'Test-SMS von Einsatzcockpit' });
-    btn.textContent = 'SMS 1 von 1 versendet';
-    toast('✓ Test-SMS gesendet');
+    label.textContent = 'SMS 1 von 1 versendet';
+    toast('Test-SMS gesendet');
     const time = new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
     log.unshift({ to: to.slice(-7).padStart(to.length, '•'), time });
     if (log.length > LOG_MAX) log.pop();
     renderLog();
     setTimeout(() => {
       btn.disabled = false;
-      btn.textContent = 'Senden';
+      label.textContent = 'Senden';
     }, 2000);
   } catch (e) {
     toast('Fehler: ' + (e.message || e));
     btn.disabled = false;
-    btn.textContent = 'Senden';
+    label.textContent = 'Senden';
   }
 }
 

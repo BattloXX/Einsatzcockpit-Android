@@ -34,8 +34,9 @@ async function manualUpdateCheck() {
   const btn = document.getElementById('btnCheckUpdate');
   if (btn.disabled) return;
   btn.disabled = true;
-  const prev = btn.textContent;
-  btn.textContent = '⏳ Prüfe…';
+  const label = btn.querySelector('.btn-text') || btn;
+  const prev = label.textContent;
+  label.textContent = 'Prüfe…';
   document.getElementById('availableVersion').textContent = 'Prüfe…';
   document.getElementById('availableVersion').className = 'version-value';
   document.getElementById('updateBtnRow').style.display = 'none';
@@ -52,10 +53,10 @@ async function manualUpdateCheck() {
       }, 2000);
     }
     const av = document.getElementById('availableVersion').textContent;
-    toast(av.includes('✓') ? '✓ App ist aktuell' : 'Update verfügbar: ' + av);
+    toast(document.getElementById('availableVersion').classList.contains('up-to-date') ? 'App ist aktuell' : 'Update verfügbar: ' + av);
   } finally {
     btn.disabled = false;
-    btn.textContent = prev;
+    label.textContent = prev;
   }
 }
 
@@ -128,7 +129,7 @@ async function checkForUpdate(triggerAutomatically = true) {
         setTimeout(updateAutoUpdateStatus, 2000);
       }
     } else {
-      availableEl.textContent = latestTag + ' ✓';
+      availableEl.textContent = latestTag + ' (aktuell)';
       availableEl.className = 'version-value up-to-date';
     }
   } catch (e) {
