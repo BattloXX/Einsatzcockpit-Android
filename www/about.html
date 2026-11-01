@@ -28,6 +28,7 @@
       display: flex;
       flex-direction: column;
       padding: 16px;
+      width:100%; max-width:720px; margin:0 auto;
       gap: 14px;
       -webkit-tap-highlight-color: transparent;
     }
@@ -36,7 +37,7 @@
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
     /* ── Header ─────────────────────────────────────────────────────────── */
-    .header { display: flex; align-items: center; gap: 12px; }
+    .header { position:sticky; top:0; z-index:3; min-height:56px; background:var(--bg); display: flex; align-items: center; gap: 12px; }
     .header-logo { width: 42px; height: 42px; border-radius: 10px; flex-shrink: 0; object-fit: contain; }
     .header-title { font-size: 1.2rem; font-weight: 700; color: var(--primary); line-height: 1.1; }
     .header-sub {
@@ -139,9 +140,102 @@
       pointer-events: none; width:max-content; max-width:calc(100vw - 32px); overflow-wrap:anywhere; text-align:center; box-shadow: 0 8px 24px rgba(0,0,0,.4);
     }
     #toast.show { transform: translateX(-50%) translateY(0); }
+
+    .i { width:20px; height:20px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; vertical-align:middle; }
+    button, a.btn, .icon-label { display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+    .card-label > .i { margin-right:6px; }
+    button:focus-visible, a.btn:focus-visible, select:focus-visible, input:focus-visible { outline:2px solid var(--primary); outline-offset:3px; }
+    .toggle input:focus-visible + .toggle-slider { outline:2px solid var(--primary); outline-offset:3px; }
+    @media (prefers-reduced-motion:reduce) {
+      *, *::before, *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+    }
+
+    [hidden] { display:none !important; }
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+    .settings-tabs { position:sticky; top:56px; z-index:2; display:flex; gap:4px; overflow-x:auto; background:var(--bg); padding:8px 0; border-bottom:1px solid var(--line2); }
+    .settings-tabs [role="tab"] { flex:1 0 auto; min-height:44px; padding:10px 12px; background:var(--s2); color:var(--muted); border:1px solid transparent; white-space:nowrap; }
+    .settings-tabs [aria-selected="true"] { background:var(--s-hi); color:var(--primary); border-color:var(--primary); }
+    .tab-dot { width:7px; height:7px; border-radius:50%; background:var(--red); flex-shrink:0; }
+    .tab-panel { display:flex; flex-direction:column; gap:14px; min-width:0; }
+    .tab-panel:focus-visible { outline:2px solid var(--primary); outline-offset:3px; border-radius:12px; }
+    button, a.btn { min-height:44px; }
+    #nativeLogText { margin-top:12px; }
+    @media (max-width:440px) {
+      .settings-tabs { overflow-x:visible; }
+      .settings-tabs [role="tab"] { flex:1 1 0; min-width:0; flex-direction:column; gap:2px; padding:6px 2px; font-size:.72rem; }
+    }
+    @media (max-width:359px) {
+      .tab-label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+    }
   </style>
 </head>
 <body>
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <!-- Tabler Icons v3.50.0, Copyright (c) Paweł Kuna, MIT License: https://github.com/tabler/tabler-icons/blob/v3.50.0/LICENSE -->
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M5 12l14 0" />
+  <path d="M5 12l6 6" />
+  <path d="M5 12l6 -6" /></symbol>
+    <symbol id="i-bell-ringing" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M10 5a2 2 0 0 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6" />
+  <path d="M9 17v1a3 3 0 0 0 6 0v-1" />
+  <path d="M21 6.727a11.05 11.05 0 0 0 -2.794 -3.727" />
+  <path d="M3 6.727a11.05 11.05 0 0 1 2.792 -3.727" /></symbol>
+    <symbol id="i-broadcast" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M18.364 19.364a9 9 0 1 0 -12.728 0" />
+  <path d="M15.536 16.536a5 5 0 1 0 -7.072 0" />
+  <path d="M11 13a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></symbol>
+    <symbol id="i-database" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M4 6a8 3 0 1 0 16 0a8 3 0 1 0 -16 0" />
+  <path d="M4 6v6a8 3 0 0 0 16 0v-6" />
+  <path d="M4 12v6a8 3 0 0 0 16 0v-6" /></symbol>
+    <symbol id="i-device-mobile" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M6 5a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-14" />
+  <path d="M11 4h2" />
+  <path d="M12 17v.01" /></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
+  <path d="M7 11l5 5l5 -5" />
+  <path d="M12 4l0 12" /></symbol>
+    <symbol id="i-file-text" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+  <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2" />
+  <path d="M9 9l1 0" />
+  <path d="M9 13l6 0" />
+  <path d="M9 17l6 0" /></symbol>
+    <symbol id="i-player-play" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M7 4v16l13 -8l-13 -8" /></symbol>
+    <symbol id="i-plug-connected" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M7 12l5 5l-1.5 1.5a3.536 3.536 0 1 1 -5 -5l1.5 -1.5" />
+  <path d="M17 12l-5 -5l1.5 -1.5a3.536 3.536 0 1 1 5 5l-1.5 1.5" />
+  <path d="M3 21l2.5 -2.5" />
+  <path d="M18.5 5.5l2.5 -2.5" />
+  <path d="M10 11l-2 2" />
+  <path d="M13 14l-2 2" /></symbol>
+    <symbol id="i-puzzle" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M4 7h3a1 1 0 0 0 1 -1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0 -1 1v3a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-1a2 2 0 0 0 -4 0v1a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1h1a2 2 0 0 0 0 -4h-1a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1" /></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+  <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M10 14l11 -11" />
+  <path d="M21 3l-6.5 18a.55 .55 0 0 1 -1 0l-3.5 -7l-7 -3.5a.55 .55 0 0 1 0 -1l18 -6.5" /></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065" />
+  <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M3 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+  <path d="M15 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+  <path d="M15 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+  <path d="M8.7 10.7l6.6 -3.4" />
+  <path d="M8.7 13.3l6.6 3.4" /></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M4 7l16 0" />
+  <path d="M10 11l0 6" />
+  <path d="M14 11l0 6" />
+  <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+  <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></symbol>
+  </svg>
 
   <div class="header">
     <img class="header-logo" src="logo.png" alt="Einsatzcockpit">
@@ -151,9 +245,17 @@
     </div>
   </div>
 
+  <div class="settings-tabs" role="tablist" aria-label="Einstellungen">
+    <button type="button" role="tab" id="tab-alarm" aria-controls="panel-alarm" aria-selected="true" tabindex="0"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-bell-ringing"/></svg><span class="tab-label">Alarm</span><span id="alarmTabDot" class="tab-dot" hidden aria-hidden="true"></span></button>
+    <button type="button" role="tab" id="tab-geraet" aria-controls="panel-geraet" aria-selected="false" tabindex="-1"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-device-mobile"/></svg><span class="tab-label">Gerät</span></button>
+    <button type="button" role="tab" id="tab-offline" aria-controls="panel-offline" aria-selected="false" tabindex="-1"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-database"/></svg><span class="tab-label">Offline</span></button>
+    <button type="button" role="tab" id="tab-diagnose" aria-controls="panel-diagnose" aria-selected="false" tabindex="-1"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-file-text"/></svg><span class="tab-label">Diagnose</span></button>
+  </div>
+
+  <section class="tab-panel" role="tabpanel" id="panel-alarm" aria-labelledby="tab-alarm" tabindex="0">
   <div class="card card-alarm" id="alarmCard">
     <div class="card-label alarm-heading">
-      <span>🚨 Einsatzalarm</span>
+      <span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-bell-ringing"/></svg> Einsatzalarm</span>
       <span class="badge-soft" id="alarmStatusBadge">Prüfe…</span>
     </div>
     <p id="alarmSetupHint" class="alarm-warning" style="display:none;">Alarm ist nicht vollständig eingerichtet – siehe rote Punkte</p>
@@ -167,7 +269,7 @@
              Capacitor-Bridge auf DIESER lokalen Seite garantiert verfuegbar ist - auf
              der remote nachgeladenen Admin-Seite ist sie das bekanntermassen nicht
              zuverlaessig (siehe Backend main.py::session_middleware-Kommentar). -->
-        <li id="alarmPushRow"><span>Push beim Server eingerichtet <span id="pushStatusBadge">Prüfe…</span></span><button class="btn-ghost" id="btnRegisterPush" onclick="registerPushAndContinue()">Registrieren</button></li>
+        <li id="alarmPushRow"><span>Push beim Server eingerichtet <span id="pushStatusBadge">Prüfe…</span></span><button class="btn-ghost" id="btnRegisterPush" onclick="registerPushAndContinue()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-plug-connected"/></svg><span class="btn-text">Registrieren</span></button></li>
       </ul>
       <p id="pushSetupHint" style="display:none;font-size:.82rem;color:var(--muted);margin-top:10px;">
         Tippe auf „Registrieren“, um dieses Gerät beim Server einzurichten.
@@ -175,14 +277,14 @@
       <p id="pushDeliveryWarning" style="display:none;font-size:.82rem;color:var(--yellow);margin-top:10px;">
         Der letzte Zustellversuch ist fehlgeschlagen.
       </p>
-      <button class="btn-ghost" id="btnPushServerTest" onclick="sendServerTestPush()" disabled>Test-Push über Server</button>
+      <button class="btn-ghost" id="btnPushServerTest" onclick="sendServerTestPush()" disabled><svg class="i" aria-hidden="true" focusable="false"><use href="#i-send"/></svg><span class="btn-text">Test-Push über Server</span></button>
     </section>
     <ul class="alarm-checklist" aria-label="Alarm-Einrichtung">
-      <li id="alarmNotificationsRow"><span>Benachrichtigungen erlaubt</span><button class="btn-ghost" onclick="requestAlarmNotifications()">Erlauben</button></li>
-      <li id="alarmFullScreenRow"><span>Vollbild-Alarm erlaubt</span><button class="btn-ghost" onclick="openAlarmSetting('fullscreen')">Erlauben</button></li>
-      <li id="alarmBatteryRow"><span>Akku-Optimierung aus</span><button class="btn-ghost" onclick="openAlarmSetting('battery')">Einrichten</button></li>
-      <li id="alarmDndRow"><span>Nicht stören übergehen</span><button class="btn-ghost" onclick="configureAlarmDnd(true)">Einrichten</button></li>
-      <li id="alarmVolumeRow"><span>Alarmlautstärke System: <span id="alarmSystemVolume">–</span></span><button class="btn-ghost" onclick="document.getElementById('alarmVolumeSlider').focus()">Anpassen</button></li>
+      <li id="alarmNotificationsRow"><span>Benachrichtigungen erlaubt</span><button class="btn-ghost" onclick="requestAlarmNotifications()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg><span class="btn-text">Erlauben</span></button></li>
+      <li id="alarmFullScreenRow"><span>Vollbild-Alarm erlaubt</span><button class="btn-ghost" onclick="openAlarmSetting('fullscreen')"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg><span class="btn-text">Erlauben</span></button></li>
+      <li id="alarmBatteryRow"><span>Akku-Optimierung aus</span><button class="btn-ghost" onclick="openAlarmSetting('battery')"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg><span class="btn-text">Einrichten</span></button></li>
+      <li id="alarmDndRow"><span>Nicht stören übergehen</span><button class="btn-ghost" onclick="configureAlarmDnd(true)"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg><span class="btn-text">Einrichten</span></button></li>
+      <li id="alarmVolumeRow"><span>Alarmlautstärke System: <span id="alarmSystemVolume">–</span></span><button class="btn-ghost" onclick="document.getElementById('alarmVolumeSlider').focus()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg><span class="btn-text">Anpassen</span></button></li>
     </ul>
     <div class="alarm-volume">
       <label for="alarmToneSelect">Alarmton</label>
@@ -191,24 +293,25 @@
         <option value="sirene">Sirene</option>
         <option value="martinshorn">Martinshorn</option>
       </select>
-      <button class="btn-ghost" id="btnAlarmTonePreview" onclick="previewAlarmVolume()" disabled>▶ Ton anhören</button>
+      <button class="btn-ghost" id="btnAlarmTonePreview" onclick="previewAlarmVolume()" disabled><svg class="i" aria-hidden="true" focusable="false"><use href="#i-player-play"/></svg><span class="btn-text">Ton anhören</span></button>
       <p class="alarm-note">Der gewählte Ton wird für den nativen Einsatzalarm verwendet.</p>
       <label for="alarmVolumeSlider">Alarmlautstärke: <span id="alarmVolumeLabel">80 %</span></label>
       <input type="range" id="alarmVolumeSlider" min="0" max="100" step="10" value="80" oninput="updateAlarmVolumeLabel()" onchange="saveAlarmVolume()">
-      <button class="btn-ghost" id="btnAlarmPreview" onclick="previewAlarmVolume()" disabled>▶ Vorschau</button>
+      <button class="btn-ghost" id="btnAlarmPreview" onclick="previewAlarmVolume()" disabled><svg class="i" aria-hidden="true" focusable="false"><use href="#i-player-play"/></svg><span class="btn-text">Vorschau</span></button>
       <p class="alarm-note">Die Alarmlautstärke wird während des Alarms auf diesen Wert gesetzt und danach zurückgestellt.</p>
     </div>
     <div class="alarm-actions">
-      <button class="btn-primary" id="btnAlarmTest" onclick="playAlarmTest()" disabled>▶ Testalarm lokal</button>
-      <button class="btn-ghost" id="btnAlarmServerTest" onclick="sendServerTestAlarm()" disabled>📡 Testalarm über Server</button>
+      <button class="btn-primary" id="btnAlarmTest" onclick="playAlarmTest()" disabled><svg class="i" aria-hidden="true" focusable="false"><use href="#i-player-play"/></svg><span class="btn-text">Testalarm lokal</span></button>
+      <button class="btn-ghost" id="btnAlarmServerTest" onclick="sendServerTestAlarm()" disabled><svg class="i" aria-hidden="true" focusable="false"><use href="#i-broadcast"/></svg><span class="btn-text">Testalarm über Server</span></button>
     </div>
     <p class="alarm-note">Übungsalarme kommen als normale Benachrichtigung ohne Sirene.</p>
     <p id="alarmUnsupported" style="display:none;font-size:.82rem;color:var(--muted);margin-top:10px;">Diese Funktion wird erst ab Android 8 unterstützt.</p>
   </div>
+  </section>
 
-  <!-- App-Version / Update -->
+  <section class="tab-panel" role="tabpanel" id="panel-geraet" aria-labelledby="tab-geraet" tabindex="0" hidden>
   <div class="card">
-    <div class="card-label">🧩 App-Version</div>
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-puzzle"/></svg> App-Version</div>
     <div class="version-row">
       <span class="version-label">Installiert</span>
       <span class="version-value" id="installedVersion">–</span>
@@ -226,15 +329,15 @@
     </div>
     <label class="toggle-row"><span>Geräteinfo an Admin melden<br><small style="color:var(--faint);">App-Version und Login-Status in der Geräteverwaltung</small></span><span class="toggle"><input type="checkbox" id="deviceStatusReportingToggle" onchange="setDeviceStatusReportingEnabled(this.checked)"><span class="toggle-slider"></span></span></label>
     <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
-      <button class="btn-ghost" style="flex:1;min-width:150px;" id="btnCheckUpdate" onclick="manualUpdateCheck()">🔄 Auf Update prüfen</button>
+      <button class="btn-ghost" style="flex:1;min-width:150px;" id="btnCheckUpdate" onclick="manualUpdateCheck()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"/></svg><span class="btn-text">Auf Update prüfen</span></button>
     </div>
     <div id="updateBtnRow" style="margin-top:10px;display:none;">
-      <button class="btn-primary" style="width:100%;" onclick="downloadApk()">⬇ Update herunterladen</button>
+      <button class="btn-primary" style="width:100%;" onclick="downloadApk()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-download"/></svg><span class="btn-text">Update herunterladen</span></button>
     </div>
   </div>
 
   <div class="card" id="autoUpdateCard" style="display:none;">
-    <div class="card-label">⚙️ Auto-Update</div>
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg> Auto-Update</div>
     <div class="version-row">
       <span class="version-label">Letzter Check</span>
       <span class="version-value" id="autoUpdateChecked">Noch nicht geprüft</span>
@@ -253,14 +356,29 @@
     </div>
     <div id="autoUpdatePermission" style="display:none;margin-top:10px;">
       <p>Für automatische Updates bitte „Unbekannte Apps installieren“ für Einsatzcockpit erlauben.</p>
-      <button class="btn-primary" onclick="openAutoUpdateInstallSettings()">Installation erlauben</button>
+      <button class="btn-primary" onclick="openAutoUpdateInstallSettings()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg><span class="btn-text">Installation erlauben</span></button>
     </div>
     <p id="autoUpdateError" style="display:none;font-size:.82rem;color:var(--red);margin-top:10px;"></p>
   </div>
 
+  <div class="card" id="gatewayCard" style="display:none;">
+    <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
+      <span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-broadcast"/></svg> SMS-Gateway</span>
+      <span class="badge-soft" id="gatewayStatusBadge">Prüfe…</span>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+      Dieses Gerät ist als SMS-Gateway eingerichtet und sendet/empfängt im Hintergrund SMS.
+    </p>
+    <div style="margin-top:10px;">
+      <button class="btn-primary" style="width:100%;" onclick="window.location.href='gateway.html'"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-broadcast"/></svg><span class="btn-text">Zum SMS-Gateway-Status</span></button>
+    </div>
+  </div>
+  </section>
+
+  <section class="tab-panel" role="tabpanel" id="panel-offline" aria-labelledby="tab-offline" tabindex="0" hidden>
   <div class="card" id="offlineCacheCard">
     <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
-      <span>📦 Offline-Datenstand</span>
+      <span><svg class="i" aria-hidden="true" focusable="false"><use href="#i-database"/></svg> Offline-Datenstand</span>
       <span class="badge-soft" id="cacheStatusBadge">Prüfe…</span>
     </div>
     <div class="cache-summary">
@@ -280,41 +398,87 @@
       <ul class="cache-log" id="cacheLog"><li><span></span><span>Noch keine Cache-Aktivität aufgezeichnet</span></li></ul>
     </div>
     <label class="toggle-row"><span>Objekte automatisch offline halten</span><span class="toggle"><input type="checkbox" id="objectSyncToggle" onchange="setObjectSyncEnabled(this.checked)"><span class="toggle-slider"></span></span></label>
-    <div style="margin-top:10px;"><button class="btn-ghost" style="width:100%;" id="btnClearObjectCache" onclick="clearObjectCache()">🗑 Objekt-Cache löschen</button></div>
-    <div style="margin-top:12px;"><button class="btn-ghost" style="width:100%;" id="btnRefreshOfflineCache" onclick="refreshOfflineCache()">↻ Offline-Daten jetzt aktualisieren</button></div>
+    <div style="margin-top:10px;"><button class="btn-ghost" style="width:100%;" id="btnClearObjectCache" onclick="clearObjectCache()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-trash"/></svg><span class="btn-text">Objekt-Cache löschen</span></button></div>
+    <div style="margin-top:12px;"><button class="btn-ghost" style="width:100%;" id="btnRefreshOfflineCache" onclick="refreshOfflineCache()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"/></svg><span class="btn-text">Offline-Daten jetzt aktualisieren</span></button></div>
   </div>
+  </section>
 
+  <section class="tab-panel" role="tabpanel" id="panel-diagnose" aria-labelledby="tab-diagnose" tabindex="0" hidden>
   <div class="card" id="nativeLogCard">
-    <div class="card-label">Diagnoseprotokoll</div>
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-file-text"/></svg> Diagnoseprotokoll</div>
     <p style="font-size:13px;color:var(--muted);">Letzte native Ereignisse (Alarm, Push, Live-Status, Updates). Keine Zugangsdaten.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn-ghost" onclick="updateNativeLog()">Aktualisieren</button>
-      <button class="btn-ghost" onclick="shareNativeLog()">Teilen</button>
-      <button class="btn-ghost" onclick="clearNativeLog()">Löschen</button>
+      <button class="btn-ghost" onclick="updateNativeLog()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-refresh"/></svg><span class="btn-text">Aktualisieren</span></button>
+      <button class="btn-ghost" onclick="shareNativeLog()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-share"/></svg><span class="btn-text">Teilen</span></button>
+      <button class="btn-ghost" onclick="clearNativeLog()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-trash"/></svg><span class="btn-text">Löschen</span></button>
     </div>
     <pre id="nativeLogText" style="max-height:240px;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--text);">Noch keine Ereignisse geladen.</pre>
   </div>
-
-  <!-- SMS-Gateway (nur sichtbar wenn dieses Geraet als Gateway konfiguriert ist) -->
-  <div class="card" id="gatewayCard" style="display:none;">
-    <div class="card-label" style="display:flex;align-items:center;justify-content:space-between;">
-      <span>📡 SMS-Gateway</span>
-      <span class="badge-soft" id="gatewayStatusBadge">Prüfe…</span>
-    </div>
-    <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
-      Dieses Gerät ist als SMS-Gateway eingerichtet und sendet/empfängt im Hintergrund SMS.
-    </p>
-    <div style="margin-top:10px;">
-      <button class="btn-primary" style="width:100%;" onclick="window.location.href='gateway.html'">📡 Zum SMS-Gateway-Status</button>
-    </div>
-  </div>
+  </section>
 
   <!-- Zurueck -->
-  <button class="btn-ghost" onclick="goBack()">← Zurück</button>
+  <button class="btn-ghost" onclick="goBack()"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-arrow-left"/></svg><span class="btn-text">Zurück</span></button>
 
   <div id="toast"></div>
 
 <script>
+// Tabs only change panel visibility; native settings continue to use the same DOM.
+(() => {
+  const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+  const panels = Array.from(document.querySelectorAll('[role="tabpanel"]'));
+  const storageKey = 'ec_about_tab';
+  const valid = (key) => tabs.some(tab => tab.id === 'tab-' + key);
+  function selectTab(key, focus = false) {
+    if (!valid(key)) return;
+    tabs.forEach(tab => {
+      const selected = tab.id === 'tab-' + key;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      if (selected && focus) {
+        tab.focus({ preventScroll:true });
+        tab.scrollIntoView({ block:'nearest', inline:'nearest' });
+      }
+    });
+    panels.forEach(panel => { panel.hidden = panel.id !== 'panel-' + key; });
+    try { localStorage.setItem(storageKey, key); } catch (_) {}
+    try { history.replaceState(null, '', '#' + key); } catch (_) {}
+  }
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => selectTab(tab.id.slice(4)));
+    tab.addEventListener('keydown', event => {
+      let next;
+      if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+      if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = tabs.length - 1;
+      if (next === undefined) return;
+      event.preventDefault();
+      selectTab(tabs[next].id.slice(4), true);
+    });
+  });
+  let initial = location.hash.slice(1);
+  if (!valid(initial)) {
+    try { initial = localStorage.getItem(storageKey); } catch (_) {}
+  }
+  selectTab(valid(initial) ? initial : 'alarm');
+  window.addEventListener('hashchange', () => {
+    const key = location.hash.slice(1);
+    if (valid(key)) selectTab(key);
+  });
+
+  // The hint includes push readiness; the badge can already be "on" without it.
+  const hint = document.getElementById('alarmSetupHint');
+  const alarmTab = document.getElementById('tab-alarm');
+  const dot = document.getElementById('alarmTabDot');
+  function updateSetupIndicator() {
+    const incomplete = hint.style.display !== 'none';
+    dot.hidden = !incomplete;
+    alarmTab.setAttribute('aria-label', incomplete ? 'Alarm, Einrichtung unvollständig' : 'Alarm');
+  }
+  new MutationObserver(updateSetupIndicator).observe(hint, { attributes:true, attributeFilter:['style'] });
+  updateSetupIndicator();
+})();
+
 // ── Capacitor-Bridge ──────────────────────────────────────────────────────────
 function waitForCapacitor(cb) {
   if (window.Capacitor && window.Capacitor.Plugins) {
@@ -474,8 +638,9 @@ async function refreshOfflineCache() {
   const button = document.getElementById('btnRefreshOfflineCache');
   if (!plugin?.refreshOfflineCache || button.disabled) return;
   button.disabled = true;
-  const previous = button.textContent;
-  button.textContent = '⏳ Abgleich wird gestartet …';
+  const label = button.querySelector('.btn-text');
+  const previous = label.textContent;
+  label.textContent = 'Abgleich wird gestartet …';
   try {
     await plugin.refreshOfflineCache();
     await updateOfflineCacheStatus();
@@ -484,7 +649,7 @@ async function refreshOfflineCache() {
     toast('Offline-Abgleich konnte nicht gestartet werden.');
   } finally {
     button.disabled = false;
-    button.textContent = previous;
+    label.textContent = previous;
   }
 }
 
@@ -836,8 +1001,9 @@ async function registerPushAndContinue() {
   const btn = document.getElementById('btnRegisterPush');
   if (btn.disabled) return;
   btn.disabled = true;
-  const prev = btn.textContent;
-  btn.textContent = '⏳ …';
+  const label = btn.querySelector('.btn-text');
+  const prev = label.textContent;
+  label.textContent = '…';
   try {
     const token = await fetchFcmToken();
     if (!token) {
@@ -850,14 +1016,14 @@ async function registerPushAndContinue() {
     }
     const result = await DeviceKeepalive.registerFcmToken({ token });
     await updateAlarmStatus();
-    toast(result.nativeAlarm ? '✅ Push eingerichtet – Einsatzalarm aktiv.'
+    toast(result.nativeAlarm ? 'Push eingerichtet – Einsatzalarm aktiv.'
       : 'Push registriert, aber der Server bestätigt den Einsatzalarm noch nicht.');
   } catch (e) {
     console.warn('[Push] Server-Registrierung fehlgeschlagen:', e);
-    toast('❌ Registrierung fehlgeschlagen: ' + (e?.message || 'unbekannter Fehler') + ' — bitte erneut versuchen.');
+    toast('Registrierung fehlgeschlagen: ' + (e?.message || 'unbekannter Fehler') + ' — bitte erneut versuchen.');
   } finally {
     btn.disabled = false;
-    btn.textContent = prev;
+    label.textContent = prev;
   }
 }
 
