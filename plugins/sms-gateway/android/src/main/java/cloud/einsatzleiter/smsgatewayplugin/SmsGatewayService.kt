@@ -497,6 +497,7 @@ class SmsGatewayService : Service() {
                 connectingSince = 0L
                 isConnected = false
                 stopAppPing()
+                NativeLog.error(applicationContext, "gateway", "connection", "Gateway-Verbindungsfehler: ${t.javaClass.simpleName}")
                 lastError = t.message ?: "Verbindungsfehler"
                 log("✗ Verbindungsfehler: ${lastError?.take(120)}")
                 updateNotification("Getrennt – ${lastError?.take(40)}")

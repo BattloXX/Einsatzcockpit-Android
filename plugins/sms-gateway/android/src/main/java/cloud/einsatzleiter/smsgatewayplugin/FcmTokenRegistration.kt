@@ -29,7 +29,7 @@ object FcmTokenRegistration {
 
     fun ensureCapabilitiesRegistered(context: Context, reason: String) {
         fun logFailure(error: Throwable) {
-            runCatching { SmsGatewayService.log("FCM-Faehigkeiten nicht registriert ($reason): ${error.message}") }
+            NativeLog.error(context, "fcm", "registration", "FCM-Faehigkeiten nicht registriert: ${error.javaClass.simpleName}")
         }
         runCatching {
             val appContext = context.applicationContext
@@ -100,13 +100,19 @@ object FcmTokenRegistration {
                 Request.Builder().url("$baseUrl/api/v1/device/fcm-token"),
             ).header(authHeader.first, authHeader.second).post(body).build()
             httpClient.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) = callback(Result.failure(e))
+                override fun onFailure(call: Call, e: IOException) {
+                    NativeLog.error(context, "fcm", "network", "FCM-Anfrage fehlgeschlagen: ${e.javaClass.simpleName}")
+                    callback(Result.failure(e))
+                }
 
                 override fun onResponse(call: Call, response: Response) {
                     val result = runCatching {
                         response.use {
                             DeviceAccessState.finalCode(it)?.let { code -> DeviceAccessState.markInvalid(context, code) }
-                            if (!it.isSuccessful) throw IOException("Server antwortet mit HTTP ${it.code}")
+                            if (!it.isSuccessful) {
+                                NativeLog.error(context, "fcm", "http_${it.code}", "FCM-Anfrage HTTP ${it.code}")
+                                throw IOException("Server antwortet mit HTTP ${it.code}")
+                            }
                             confirmsNativeAlarm(it.body?.string().orEmpty())
                         }
                     }
@@ -149,7 +155,10 @@ object FcmTokenRegistration {
                 Request.Builder().url("$baseUrl$path"),
             ).header(authHeader.first, authHeader.second).post(body).build()
             httpClient.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) = callback(Result.failure(e))
+                override fun onFailure(call: Call, e: IOException) {
+                    NativeLog.error(context, "fcm", "network", "FCM-Anfrage fehlgeschlagen: ${e.javaClass.simpleName}")
+                    callback(Result.failure(e))
+                }
 
                 override fun onResponse(call: Call, response: Response) {
                     val result = runCatching {
@@ -165,7 +174,10 @@ object FcmTokenRegistration {
                                     "Server kennt den Test-Push noch nicht – bitte Server aktualisieren"
                                 })
                             }
-                            if (!it.isSuccessful) throw IOException("Server antwortet mit HTTP ${it.code}")
+                            if (!it.isSuccessful) {
+                                NativeLog.error(context, "fcm", "http_${it.code}", "FCM-Anfrage HTTP ${it.code}")
+                                throw IOException("Server antwortet mit HTTP ${it.code}")
+                            }
                             JSONObject(responseBody)
                         }
                     }
@@ -199,7 +211,10 @@ object FcmTokenRegistration {
                 .get()
                 .build()
             httpClient.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) = callback(Result.failure(e))
+                override fun onFailure(call: Call, e: IOException) {
+                    NativeLog.error(context, "fcm", "network", "FCM-Anfrage fehlgeschlagen: ${e.javaClass.simpleName}")
+                    callback(Result.failure(e))
+                }
 
                 override fun onResponse(call: Call, response: Response) {
                     response.use {

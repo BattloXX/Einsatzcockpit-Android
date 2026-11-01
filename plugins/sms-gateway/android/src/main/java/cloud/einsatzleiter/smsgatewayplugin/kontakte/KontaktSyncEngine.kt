@@ -47,6 +47,7 @@ class KontaktSyncEngine(
             } else {
                 syncDelta(db, baseUrl, token, requireNotNull(status))
             }
+            cloud.einsatzleiter.smsgatewayplugin.ReportSender.mark(appContext, "letzter_kontaktsync_at")
             val contactCount = db.kontaktDao().count()
             OfflineCacheStatusStore.logActivity(
                 appContext,
@@ -63,6 +64,7 @@ class KontaktSyncEngine(
             OfflineCacheStatusStore.logActivity(appContext, "Kontakt-Sync beendet: Gerätezugang ungültig")
             true
         } catch (error: Exception) {
+            cloud.einsatzleiter.smsgatewayplugin.NativeLog.error(appContext, "sync", "contacts", "Kontaktsync fehlgeschlagen: ${error.javaClass.simpleName}")
             val message = error.message ?: error.javaClass.simpleName
             OfflineCacheStatusStore.logActivity(appContext, "Kontakt-Sync fehlgeschlagen: $message")
             fail(db, message)

@@ -20,6 +20,7 @@ import androidx.core.app.NotificationCompat
 class DeviceKeepaliveService : Service() {
 
     companion object {
+        @Volatile internal var isRunning = false
         const val ACTION_START = "cloud.einsatzleiter.smsgatewayplugin.KEEPALIVE_START"
         const val ACTION_STOP  = "cloud.einsatzleiter.smsgatewayplugin.KEEPALIVE_STOP"
         const val ACTION_LIVE_REFRESH = "cloud.einsatzleiter.smsgatewayplugin.LIVE_REFRESH"
@@ -40,6 +41,7 @@ class DeviceKeepaliveService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         NativeLog.init(applicationContext)
         createNotificationChannel()
         livePoller = EinsatzLivePoller(
@@ -74,6 +76,7 @@ class DeviceKeepaliveService : Service() {
     override fun onDestroy() {
         livePoller?.stop()
         releaseWakeLock()
+        isRunning = false
         super.onDestroy()
     }
 

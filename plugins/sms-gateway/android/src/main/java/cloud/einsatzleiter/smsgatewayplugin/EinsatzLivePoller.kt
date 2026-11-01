@@ -28,6 +28,7 @@ class EinsatzLivePoller(
     private val onIdleTimeout: () -> Unit = {},
 ) {
     companion object {
+        @Volatile internal var isRunning = false
         const val PREF_BASE_URL = "el_base_url"
         const val PREF_INCIDENT_ID = "el_live_incident_id"
         const val PREF_LAST_OK_MS = "el_live_last_ok_ms"
@@ -59,6 +60,8 @@ class EinsatzLivePoller(
     private val connectivityManager = context.getSystemService(ConnectivityManager::class.java)
     private var running = false
     private var inFlight: Call? = null
+    private var lastResult: String? = null
+    private var lastResultLogMs = 0L
     private var failures = 0
     private var authFailures = 0
     private var currentState: EinsatzLiveState? = null
@@ -84,12 +87,14 @@ class EinsatzLivePoller(
             return
         }
         running = true
+        isRunning = true
         try { connectivityManager.registerDefaultNetworkCallback(networkCallback) } catch (_: Exception) {}
         schedule(INITIAL_DELAY_MS)
     }
 
     fun stop() {
         running = false
+        isRunning = false
         handler.removeCallbacks(pollRunnable)
         inFlight?.cancel()
         inFlight = null
@@ -139,10 +144,6 @@ class EinsatzLivePoller(
             onIdleTimeout()
             return
         }
-        if (prefs.getString("el_device_token", null).isNullOrBlank()) {
-            log("Live-Poll ohne Device-Token; bestehende Session-Authentifizierung wird verwendet")
-        }
-        log("Live-Poll wird versucht")
         val deviceToken = prefs.getString("el_device_token", null)?.takeIf { it.isNotBlank() }
         val appVersion = reportedAppVersion()
         val dutyStateUrl = if (appVersion == null) {
@@ -174,6 +175,7 @@ class EinsatzLivePoller(
                         val code = it.code
                         val invalidCode = DeviceAccessState.finalCode(it)
                         val body = it.body?.string()
+                        if (it.isSuccessful) ReportSender.serverTime(context, body, it.header("Date"))
                         handler.post {
                             inFlight = null
                             if (!running) return@post
@@ -203,6 +205,8 @@ class EinsatzLivePoller(
             handleNetworkFailure(baseUrl)
             return
         }
+        ReportSender.mark(context, "letzter_poll_ok_at")
+        logResult(if (state == null) "kein Einsatz" else "Einsatz aktiv")
         val gslQueue = response.gslQueue
         val gslLive = response.gslLive
         if (state == null) clearIncident(clearGslState = false)
@@ -251,6 +255,8 @@ class EinsatzLivePoller(
 
     /** Endgültig ungültiger Gerätezugang: keine weiteren Versuche, Hinweis für den Nutzer. */
     private fun handleAccessInvalid(code: String) {
+        NativeLog.error(context, "poller", "access_invalid", "Gerätezugang ungültig")
+        lastResult = "Fehler"
         log("Live-Poll beendet: Gerätezugang ungültig ($code)")
         failures = 0
         clearIncident()
@@ -260,7 +266,8 @@ class EinsatzLivePoller(
     }
 
     private fun handleAuthFailure(statusCode: Int) {
-        log("Live-Poll Authentifizierung fehlgeschlagen (HTTP $statusCode)")
+        NativeLog.error(context, "poller", "auth", "Authentifizierung fehlgeschlagen (HTTP $statusCode)")
+        lastResult = "Fehler"
         failures = 0
         clearIncident()
         authFailures = nextAuthFailureCount(authFailures, true)
@@ -274,6 +281,8 @@ class EinsatzLivePoller(
 
     private fun handleNetworkFailure(baseUrl: String) {
         failures++
+        lastResult = "Fehler"
+        NativeLog.error(context, "poller", "network", "Live-Poll fehlgeschlagen")
         val lastOk = prefs.getString(PREF_LAST_OK_MS, null)?.toLongOrNull() ?: 0L
         val staleFor = if (lastOk > 0L) System.currentTimeMillis() - lastOk else Long.MAX_VALUE
         when {
@@ -304,6 +313,15 @@ class EinsatzLivePoller(
         if (!running) return
         handler.removeCallbacks(pollRunnable)
         handler.postDelayed(pollRunnable, delayMs)
+    }
+
+    private fun logResult(result: String) {
+        val now = System.currentTimeMillis()
+        if (lastResult != result || now - lastResultLogMs >= 3_600_000L) {
+            log("Live-Poll: $result")
+            lastResultLogMs = now
+        }
+        lastResult = result
     }
 
     private fun log(message: String) = SmsGatewayService.log(message)

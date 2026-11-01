@@ -92,6 +92,8 @@
     .btn-ghost   { background: var(--s-hi); color: var(--text); border: 1px solid var(--border); }
 
     /* ── Version / Update ────────────────────────────────────────────────── */
+    #deviceVersion { font-size:1.7rem; font-weight:700; overflow-wrap:anywhere; }
+    #deviceProperties { line-height:1.7; overflow-wrap:anywhere; }
     .version-row { display: flex; align-items: center; gap: 8px; font-size: .85rem; margin-top: 8px; }
     .version-row:first-of-type { margin-top: 0; }
     .version-label { color: var(--muted); min-width: 84px; }
@@ -311,6 +313,11 @@
 
   <section class="tab-panel" role="tabpanel" id="panel-geraet" aria-labelledby="tab-geraet" tabindex="0" hidden>
   <div class="card">
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-device-mobile"/></svg> Dieses Gerät</div>
+    <div id="deviceVersion">Version wird geladen…</div>
+    <div id="deviceProperties">Geräteeigenschaften werden geladen…</div>
+  </div>
+  <div class="card">
     <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-puzzle"/></svg> App-Version</div>
     <div class="version-row">
       <span class="version-label">Installiert</span>
@@ -404,6 +411,13 @@
   </section>
 
   <section class="tab-panel" role="tabpanel" id="panel-diagnose" aria-labelledby="tab-diagnose" tabindex="0" hidden>
+  <div class="card">
+    <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-file-text"/></svg> Gerätebericht</div>
+    <p id="diagnoseLastSent" aria-live="polite">Zuletzt an Zentrale gesendet: noch nie</p>
+    <button type="button" class="btn-primary" id="btnSendDiagnose" onclick="sendDiagnoseReport()" style="margin-top:12px;">Jetzt senden</button>
+    <p class="alarm-note">Einstellungen werden nur in der App geändert. In der Zentrale sind sie einsehbar; Fehler werden dorthin gemeldet.</p>
+    <p id="diagnoseSendStatus" class="alarm-note" role="status"></p>
+  </div>
   <div class="card" id="nativeLogCard">
     <div class="card-label"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-file-text"/></svg> Diagnoseprotokoll</div>
     <p style="font-size:13px;color:var(--muted);">Letzte native Ereignisse (Alarm, Push, Live-Status, Updates). Keine Zugangsdaten.</p>
@@ -479,6 +493,53 @@
   updateSetupIndicator();
 })();
 
+async function updateDeviceInfo() {
+  if (!SmsGateway?.getDeviceInfo) return;
+  try {
+    const info = await SmsGateway.getDeviceInfo();
+    const app = info.app || {};
+    document.getElementById('deviceVersion').textContent = `${app.version_name || '–'} (${app.version_code ?? '–'}) · ${app.build_variant || '–'}`;
+    const labels = {
+      geraet: { hersteller:'Hersteller', marke:'Marke', modell:'Modell', geraetename:'Gerät', klasse:'Klasse', foldable:'Faltbar', abi:'ABI', ram_mb_total:'RAM gesamt (MB)', ram_mb_free:'RAM frei (MB)', speicher_mb_free:'Speicher frei (MB)', akku_prozent:'Akku (%)', laedt:'Lädt', akkusparer:'Akkusparer', sim_anzahl:'SIM-Anzahl', nfc:'NFC', kamera:'Kamera', telefonie:'Telefonie' },
+      android: { version:'Android', sdk_int:'SDK', sicherheitspatch:'Sicherheitspatch', build_id:'Build', oberflaeche:'Oberfläche' },
+      display: { breite_px:'Breite (px)', hoehe_px:'Höhe (px)', dpi:'DPI', dichte_bucket:'Dichte', breite_dp:'Breite (dp)', hz:'Bildrate (Hz)', ausrichtung:'Ausrichtung', schrift_skala:'Schriftgröße', anzeige_skala:'Anzeigegröße' },
+      webview: { paket:'WebView', version:'WebView-Version' },
+      locale: { sprache:'Sprache', zeitzone:'Zeitzone', uhr_abweichung_s:'Uhrabweichung (s)' }
+    };
+    const properties = document.getElementById('deviceProperties');
+    properties.replaceChildren();
+    for (const [section, fields] of Object.entries(labels)) {
+      for (const [key, label] of Object.entries(fields)) {
+        const value = info[section]?.[key];
+        if (value === undefined) continue;
+        const row = document.createElement('div');
+        row.textContent = `${label}: ${value === null ? 'unbekannt' : typeof value === 'boolean' ? (value ? 'ja' : 'nein') : value}`;
+        properties.appendChild(row);
+      }
+    }
+    document.getElementById('diagnoseLastSent').textContent = 'Zuletzt an Zentrale gesendet: ' +
+      (info.last_sent_at ? new Date(info.last_sent_at).toLocaleString('de-AT') : 'noch nie');
+  } catch (_) {
+    document.getElementById('deviceProperties').textContent = 'Geräteinformationen derzeit nicht verfügbar.';
+  }
+}
+
+async function sendDiagnoseReport() {
+  const button = document.getElementById('btnSendDiagnose');
+  const status = document.getElementById('diagnoseSendStatus');
+  button.disabled = true;
+  try {
+    if (!SmsGateway?.sendDiagnoseReport) throw new Error('Bridge unavailable');
+    await SmsGateway.sendDiagnoseReport();
+    status.textContent = 'Bericht zum Versand vorgemerkt. Bei fehlender Verbindung wird er später gesendet.';
+    await updateDeviceInfo();
+  } catch (_) {
+    status.textContent = 'Bericht konnte nicht vorgemerkt werden. Bitte erneut versuchen.';
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // ── Capacitor-Bridge ──────────────────────────────────────────────────────────
 function waitForCapacitor(cb) {
   if (window.Capacitor && window.Capacitor.Plugins) {
@@ -500,6 +561,8 @@ waitForCapacitor(async () => {
   Preferences = window.Capacitor.Plugins.Preferences;
   SmsGateway = window.Capacitor.Plugins.SmsGateway;
   AlarmChannel = window.Capacitor.Plugins.AlarmChannel;
+  await updateDeviceInfo();
+  setInterval(updateDeviceInfo, 15000);
 
   // Gateway-Karte nur zeigen wenn dieses Geraet als Gateway konfiguriert ist
   // (Einheit-Geraet oder kombiniertes Geraet mit Gateway-Rolle).
