@@ -260,7 +260,7 @@ class SmsDispatchProtocolTest {
         legacy.writableDatabase.execSQL("""INSERT INTO sms_jobs
             (scope, job_id, generation, wire_id, payload_hash, recipient, body, phase, created_at)
             VALUES (?, 'job', 1, 'job:1', ?, '+430000', 'Testalarm', 'received', ?)""",
-            arrayOf(scope, SmsDispatchJournal.digest("+430000\u0000Testalarm"), now))
+            arrayOf<Any>(scope, SmsDispatchJournal.digest("+430000\u0000Testalarm"), now))
         legacy.close()
         journal = SmsDispatchJournal(context, { scope }, { now })
         val row = journal.get(scope, "job")!!

@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
         KontaktSyncStatusEntity::class,
     ],
     version = 1,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class KontaktDatabase : RoomDatabase() {
     abstract fun kontaktDao(): KontaktDao
