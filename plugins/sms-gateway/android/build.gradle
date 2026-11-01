@@ -63,6 +63,8 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation 'com.google.firebase:firebase-messaging:24.1.0'
     implementation 'androidx.work:work-runtime-ktx:2.12.0'
+    // Gleiche Version wie das Background-Geolocation-Plugin (kein zweiter Stand im APK).
+    implementation 'com.google.android.gms:play-services-location:21.0.1'
     implementation 'androidx.lifecycle:lifecycle-process:2.11.0'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation "androidx.room:room-runtime:$roomVersion"

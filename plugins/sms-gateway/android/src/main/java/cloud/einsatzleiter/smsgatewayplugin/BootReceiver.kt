@@ -28,6 +28,7 @@ class BootReceiver : BroadcastReceiver() {
 
         val prefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
         ObjektOfflineSyncWorker.schedule(context)
+        LocationReport.ensureScheduled(context)
         if (context.resources.getBoolean(R.bool.auto_update_enabled)) {
             AutoUpdateWorker.schedule(context)
         }

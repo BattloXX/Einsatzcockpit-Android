@@ -62,10 +62,17 @@ class SmsGatewayPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun sendLocationNow(call: PluginCall) {
+        LocationReport.ensureScheduled(context)
+        call.resolve(JSObject().put("queued", LocationReport.runNow(context, "manual")))
+    }
+
+    @PluginMethod
     fun getDeviceInfo(call: PluginCall) {
         val result = JSObject(DiagnoseReportLogic.json(DeviceInfoCollector(context).collect()))
         val lastSent = ReportSender.prefs(context).getLong("last_sent", 0)
         result.put("last_sent_at", if (lastSent > 0) DiagnoseReportLogic.iso(lastSent) else org.json.JSONObject.NULL)
+        result.put("standort", JSObject(DiagnoseReportLogic.json(LocationReport.state(context))))
         call.resolve(result)
     }
 
@@ -73,6 +80,7 @@ class SmsGatewayPlugin : Plugin() {
         NativeLog.init(context)
         context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(diagnoseSettingsListener)
         ReportSender.schedule(context, "startup")
+        LocationReport.ensureScheduled(context)
         SmsGatewayService.addPluginListener(serviceListener)
     }
 
