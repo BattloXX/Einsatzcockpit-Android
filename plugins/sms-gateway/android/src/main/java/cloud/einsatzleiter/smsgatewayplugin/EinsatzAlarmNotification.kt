@@ -77,11 +77,7 @@ object EinsatzAlarmNotification {
             .setContentIntent(content)
             .apply {
                 if (finished) setSilent(true)
-                if (fallback && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                    @Suppress("DEPRECATION")
-                    setSound(Uri.parse("android.resource://${context.packageName}/raw/einsatz_alarm"), AudioManager.STREAM_ALARM)
-                    setVibrate(longArrayOf(0, 700, 300, 700))
-                }
+                Compat.fallbackAlarmSound(this, context, fallback)
                 if (!preview && !finished) setFullScreenIntent(content, true)
             }
             .addAction(0, "Quittieren", stop)

@@ -1,0 +1,42 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Capacitor-Majors werden manuell migriert, auch bei Zusatzplugins.
+    ignore:
+      - dependency-name: "@capacitor/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@capacitor-community/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@capacitor-mlkit/*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      capacitor:
+        patterns: ["@capacitor/*", "@capacitor-community/*", "@capacitor-mlkit/*"]
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+    # Toolchain-Majors nur gemeinsam und nach manueller Prüfung anheben.
+    ignore:
+      - dependency-name: "org.jetbrains.kotlin:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "com.google.devtools.ksp:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "com.android.tools.build:gradle"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "gradle-wrapper"
+        update-types: ["version-update:semver-major"]
+    groups:
+      androidx:
+        patterns: ["androidx.*"]
+      kotlin-ksp:
+        patterns: ["org.jetbrains.kotlin:*", "com.google.devtools.ksp:*"]
+      firebase:
+        patterns: ["com.google.firebase:*"]

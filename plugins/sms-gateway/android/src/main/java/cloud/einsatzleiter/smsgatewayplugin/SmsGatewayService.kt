@@ -1,8 +1,6 @@
 package cloud.einsatzleiter.smsgatewayplugin
 
 import android.Manifest
-import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -20,8 +18,6 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Telephony
-import android.telephony.SmsManager
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.getcapacitor.JSObject
 import okhttp3.OkHttpClient
@@ -56,7 +52,6 @@ class SmsGatewayService : Service() {
         const val EXTRA_URL    = "url"
         const val EXTRA_TOKEN  = "token"
 
-        private const val NOTIF_CHANNEL_ID = "ec_sms_gateway"
         private const val NOTIF_ID         = 7301
         private const val WAKE_LOCK_TAG    = "einsatzcockpit:smsgw"
         private const val CONNECT_STUCK_TIMEOUT_MS = 25_000L
@@ -101,52 +96,12 @@ class SmsGatewayService : Service() {
         // ── Direkter SMS-Versand (Test-Button, ohne WebSocket-Job) ────────────
         fun sendDirectSms(context: Context, to: String, text: String,
                           callback: (ok: Boolean, msg: String) -> Unit) {
-            try {
-                val smsManager = getSmsManager(context)
-                val parts = smsManager.divideMessage(text) ?: arrayListOf(text)
-                val action = "cloud.einsatzleiter.smsgatewayplugin.TEST_SMS_SENT"
-                val partCount = parts.size
-                val sentParts = AtomicInteger(0)
-                val failed = AtomicInteger(0)
-                val counter = requestCounter
-
-                val receiver = object : BroadcastReceiver() {
-                    override fun onReceive(ctx: Context, intent: Intent) {
-                        val done = sentParts.incrementAndGet()
-                        if (resultCode != android.app.Activity.RESULT_OK) failed.incrementAndGet()
-                        if (done >= partCount) {
-                            try { ctx.unregisterReceiver(this) } catch (_: Exception) {}
-                            val ok = failed.get() == 0
-                            callback(ok, if (ok) "OK" else "SmsManager resultCode=$resultCode")
-                        }
-                    }
-                }
-                ContextCompat.registerReceiver(
-                    context, receiver, IntentFilter(action), ContextCompat.RECEIVER_NOT_EXPORTED)
-
-                val intents = ArrayList<PendingIntent>(partCount)
-                repeat(partCount) {
-                    intents.add(PendingIntent.getBroadcast(
-                        context, counter.getAndIncrement(),
-                        Intent(action).setPackage(context.packageName),
-                        PendingIntent.FLAG_IMMUTABLE))
-                }
-                if (partCount == 1) smsManager.sendTextMessage(to, null, text, intents[0], null)
-                else smsManager.sendMultipartTextMessage(to, null, parts, intents, null)
-            } catch (e: Exception) {
-                callback(false, e.message ?: "Unknown error")
-            }
+            SmsGatewaySender.sendDirectSms(context, to, text, callback, requestCounter)
         }
 
         private val requestCounter = AtomicInteger(10000)
 
-        private fun getSmsManager(context: Context): SmsManager =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                context.getSystemService(SmsManager::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                SmsManager.getDefault()
-            }
+
     }
 
     // ── Instanzfelder ─────────────────────────────────────────────────────────
@@ -241,7 +196,7 @@ class SmsGatewayService : Service() {
     override fun onCreate() {
         super.onCreate()
         NativeLog.init(applicationContext)
-        createNotificationChannel()
+        SmsGatewayNotification.createChannel(notificationManager)
         dispatchJournal = SmsDispatchJournal(applicationContext, ::dispatchScope)
         dispatchProtocol = SmsDispatchProtocol(dispatchJournal, object : SmsDispatchProtocol.Modem {
             override fun preflight(recipient: String, body: String): String? =
@@ -384,7 +339,7 @@ class SmsGatewayService : Service() {
      * Manifest-Deklaration.
      */
     private fun startForegroundCompat(status: String) {
-        val notif = buildNotification(status)
+        val notif = SmsGatewayNotification.build(this, status)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
@@ -501,7 +456,7 @@ class SmsGatewayService : Service() {
         ws?.cancel()
         ws = null
 
-        val wsUri = toWsUrl(wsUrl)
+        val wsUri = SmsGatewayLogic.toWsUrl(wsUrl)
         val scope = dispatchScope()
         log("Verbinde mit $wsUri")
         val request = Request.Builder()
@@ -595,7 +550,7 @@ class SmsGatewayService : Service() {
     // ── SMS-Versand ───────────────────────────────────────────────────────────
 
     private fun submitJournaledSms(to: String, text: String, callback: (Int, Int, Boolean) -> Unit) {
-        val smsManager = getSmsManager(applicationContext)
+        val smsManager = Compat.getSmsManager(applicationContext)
         val parts = smsManager.divideMessage(text) ?: arrayListOf(text)
         val action = "cloud.einsatzleiter.smsgatewayplugin.SMS_SENT.${UUID.randomUUID()}"
         val seen = mutableSetOf<Int>()
@@ -613,9 +568,9 @@ class SmsGatewayService : Service() {
                             sentCount.incrementAndGet()
                             lastSentTo = to
                             lastSentAt = System.currentTimeMillis()
-                            log("✓ SMS vom Modem angenommen: ${maskNumber(to)} (${parts.size} Teil(e))")
+                            log("✓ SMS vom Modem angenommen: ${SmsGatewayLogic.maskNumber(to)} (${parts.size} Teil(e))")
                             emit("smsSent") {
-                                put("to", maskNumber(to))
+                                put("to", SmsGatewayLogic.maskNumber(to))
                                 put("parts", parts.size)
                                 put("at", lastSentAt)
                             }
@@ -712,16 +667,11 @@ class SmsGatewayService : Service() {
     }
 
     private fun forwardReceivedSms(from: String, text: String) {
-        val entry = JSONObject().apply {
-            put("id", UUID.randomUUID().toString())
-            put("from", from)
-            put("text", text)
-            put("sent_at", System.currentTimeMillis())
-        }
+        val entry = SmsGatewayLogic.inboundEntry(from, text)
         enqueueInboundSms(entry)
-        log("→ SMS empfangen von ${maskNumber(from)} (${text.length} Zeichen)")
+        log("→ SMS empfangen von ${SmsGatewayLogic.maskNumber(from)} (${text.length} Zeichen)")
         emit("smsReceived") {
-            put("from", maskNumber(from))
+            put("from", SmsGatewayLogic.maskNumber(from))
             put("preview", text.take(60))
             put("at", System.currentTimeMillis())
         }
@@ -758,7 +708,7 @@ class SmsGatewayService : Service() {
         val arr = synchronized(inboundLock) { loadInboundQueue() }
         for (i in 0 until arr.length()) {
             val obj = arr.optJSONObject(i) ?: continue
-            val payload = JSONObject(obj.toString()).apply { put("type", "sms.received") }
+            val payload = SmsGatewayLogic.inboundPayload(obj)
             socket.send(payload.toString())
         }
     }
@@ -784,25 +734,9 @@ class SmsGatewayService : Service() {
         log("Reconnect in ${reconnectDelay / 1000} s…")
         updateNotification("Reconnect in ${reconnectDelay / 1000}s…")
         reconnectHandler.postDelayed({
-            reconnectDelay = minOf(reconnectDelay * 2, 30_000L)
+            reconnectDelay = SmsGatewayLogic.nextReconnectDelay(reconnectDelay)
             connect()
         }, reconnectDelay)
-    }
-
-    private fun toWsUrl(url: String): String = url
-        .replace("https://", "wss://")
-        .replace("http://", "ws://")
-        .trimEnd('/')
-        .plus("/ws/sms-gateway")
-
-    private fun buildSmsResult(jobId: String, ok: Boolean, error: String?): String =
-        if (ok) """{"type":"sms.result","id":"$jobId","ok":true,"provider_response":"OK"}"""
-        else    """{"type":"sms.result","id":"$jobId","ok":false,"error":"${error?.replace("\"","\\\"")}"}"""
-
-    private fun maskNumber(number: String): String {
-        val digits = number.filter { it.isDigit() }
-        return if (digits.length >= 6) "*".repeat(number.length - 4) + number.takeLast(4)
-               else "****"
     }
 
     private fun emitStatus() {
@@ -817,36 +751,7 @@ class SmsGatewayService : Service() {
 
     // ── Benachrichtigungen ────────────────────────────────────────────────────
 
-    private fun createNotificationChannel() {
-        val ch = NotificationChannel(
-            NOTIF_CHANNEL_ID,
-            "SMS-Gateway",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "Einsatzcockpit SMS-Gateway-Status"
-            setShowBadge(false)
-        }
-        notificationManager.createNotificationChannel(ch)
-    }
-
-    private fun buildNotification(status: String): Notification {
-        val tapIntent = packageManager.getLaunchIntentForPackage(packageName)
-            ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP) }
-        val tapPending = if (tapIntent != null)
-            PendingIntent.getActivity(this, 0, tapIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        else null
-        return NotificationCompat.Builder(this, NOTIF_CHANNEL_ID)
-            .setContentTitle("SMS-Gateway aktiv")
-            .setContentText(status)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setOngoing(true)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .apply { tapPending?.let { setContentIntent(it) } }
-            .build()
-    }
-
     private fun updateNotification(status: String) {
-        notificationManager.notify(NOTIF_ID, buildNotification(status))
+        notificationManager.notify(NOTIF_ID, SmsGatewayNotification.build(this, status))
     }
 }
