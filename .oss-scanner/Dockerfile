@@ -7,7 +7,7 @@ FROM eclipse-temurin:21-jdk-noble
 ENV DEBIAN_FRONTEND=noninteractive \
     ANDROID_SDK_ROOT=/opt/android-sdk \
     ANDROID_HOME=/opt/android-sdk \
-    NODE_VERSION=20.19.5 \
+    NODE_VERSION=22.22.0 \
     GRADLE_USER_HOME=/opt/gradle-home
 ENV PATH=/opt/node/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:$PATH
 
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl unzip git python3 xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Node.js 20 (Capacitor 7)
+# Node.js 22 (Capacitor 7)
 RUN curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz \
     && mkdir -p /opt/node && tar -xJf /tmp/node.tar.xz -C /opt/node --strip-components=1 && rm /tmp/node.tar.xz
 
@@ -31,12 +31,12 @@ RUN mkdir -p /opt/android-sdk/cmdline-tools \
 COPY . /src
 WORKDIR /src
 
-# Gleiche Vorbereitung wie die CI (cap add/sync, SDK-36-Patch, Platzhalter-Firebase, Manifest-Berechtigungen)
-RUN npm install && bash scripts/prepare-android.sh
+# Gleiche Vorbereitung wie die CI (versioniertes Android-Projekt, cap sync, Platzhalter-Firebase)
+RUN npm ci && bash scripts/prepare-android.sh \
+    && cp assets/Logo-rot.png assets/icon.png \
+    && cp assets/Logo-rot.png assets/icon-foreground.png \
+    && npx capacitor-assets generate --android
 
 # Debug-APK bauen – lädt alle Gradle-Abhängigkeiten in den Cache, damit Analyse/Build offline funktionieren.
 # Standard-Variante (ohne Auto-Update), wie im CI-Schritt "Build Standard-APK"
-RUN mkdir -p plugins/sms-gateway/android/src/main/res/values \
-    && printf '<resources>\n    <bool name="auto_update_enabled">false</bool>\n</resources>\n' \
-       > plugins/sms-gateway/android/src/main/res/values/auto_update.xml \
-    && cd android && ./gradlew --no-daemon assembleDebug
+RUN cd android && ./gradlew --no-daemon assembleDebug

@@ -65,7 +65,8 @@ Most important:
 Less important / out of scope:
 
 - The remote web application. It is scanned separately as the Einsatzcockpit repository.
-- Generated `android/` project files (created by `npx cap add android` at build time).
+- Generated Android build outputs and assets (`cap sync` / `capacitor-assets`).
+  Versioned native sources and configuration under `android/` remain in scope.
 - Third-party Capacitor plugins unless misused by our code.
 - Root, physical access, or a compromised server. A compromised server is trusted by design
   for content, but should not lead to native code execution outside the intended update

@@ -81,7 +81,7 @@ Das `native-bridge.js` im Backend erkennt automatisch, ob es in Capacitor läuft
 
 ## Voraussetzungen
 
-- **Node.js** 20+
+- **Node.js** 22+
 - **Java** 21 (Capacitor 7 erfordert Java 21; Java 17 reicht nicht)
 - **Android Studio** (empfohlen für lokale Entwicklung / Emulator)
 - Ein aktives **Firebase-Projekt** (für FCM-Push, kostenlos)
@@ -93,7 +93,7 @@ Das `native-bridge.js` im Backend erkennt automatisch, ob es in Capacitor läuft
 ### 1. Abhängigkeiten installieren
 
 ```bash
-npm install
+npm ci
 ```
 
 ### 2. Android-Plattform einrichten
@@ -102,11 +102,14 @@ npm install
 bash scripts/prepare-android.sh
 ```
 
-> **Hinweis:** Der `android/`-Ordner ist gitignored (Capacitor-generiert). Er wird lokal und im CI bei jedem Build neu angelegt. Eigene Anpassungen am Manifest müssen entweder lokal gemacht oder als Patch im Workflow hinterlegt werden.
+Der `android/`-Ordner ist versioniert (minSdk 24, compileSdk 36). Native Quellen,
+Manifest und Gradle-Konfiguration direkt dort ändern. Das Skript führt nach `npm ci`
+nur `npx cap sync android` aus und schreibt die ignorierte Firebase-Datei aus
+`GOOGLE_SERVICES_JSON` oder als Platzhalter (ohne FCM).
 
-Das Vorbereitungsskript registriert außerdem verifizierte Android App Links für
-`https://einsatzcockpit.com` und kopiert `scripts/MainActivity.java` in das generierte
-Projekt. Links öffnen ihr Ziel mit Pfad, Query und Fragment in der App-WebView,
+Das versionierte Manifest registriert verifizierte Android App Links für
+`https://einsatzcockpit.com`. Die Activity liegt unter
+`android/app/src/main/java/cloud/einsatzleiter/app/MainActivity.java`. Links öffnen ihr Ziel mit Pfad, Query und Fragment in der App-WebView,
 sowohl beim Kaltstart als auch bei bereits laufender App. Die normale Startadresse
 bleibt `https://einsatzcockpit.com`.
 
@@ -115,6 +118,14 @@ Für das automatische Öffnen muss die Signatur der installierten APK in
 für die signierten Release-APKs; lokale Debug-APKs haben eine andere Signatur.
 Falls Android bereits eine andere Auswahl gespeichert hat: **Einstellungen →
 Apps → Einsatzcockpit → Standardmäßig öffnen → Unterstützte Links öffnen** aktivieren.
+
+Icons und Splashscreens werden aus `assets/` erzeugt (wie in CI):
+
+```bash
+cp assets/Logo-rot.png assets/icon.png
+cp assets/Logo-rot.png assets/icon-foreground.png
+npx capacitor-assets generate --android
+```
 
 ### 3. Firebase-Datei ablegen
 
@@ -145,19 +156,19 @@ Bei jedem Push auf `main` und bei Tags (`v2026.09.19`, bei mehreren Releases am 
 ```
 Checkout
   → npm ci
-  → npx cap add android          # Android-Projekt frisch anlegen
-  → mkdir android/app/src/main/assets
   → npx cap sync android         # Plugins + Config synchronisieren
   → google-services.json schreiben (aus Secret GOOGLE_SERVICES_JSON)
-  → AndroidManifest.xml patchen  # Standort-Berechtigungen einfügen
+  → Icons aus assets/ generieren
+  → Unit-Tests (Plugins und Offline-Seite)
   → ./gradlew assembleRelease    # falls KEYSTORE_FILE gesetzt
     oder assembleDebug           # Fallback ohne Keystore
+  → Auto-Update-APK mit generiertem Ressourcen-Overlay bauen
   → APK signieren (apksigner)    # nur wenn KEYSTORE_FILE gesetzt
   → Artefakt hochladen
   → GitHub Release erstellen     # nur bei v-Tags + Keystore
 ```
 
-Der Manifest-Patch fügt automatisch folgende Berechtigungen ein, die Capacitor nicht selbst setzt:
+Das versionierte Manifest enthält unter anderem folgende Berechtigungen, die Capacitor nicht selbst setzt:
 
 | Berechtigung | Zweck |
 |---|---|
@@ -450,8 +461,8 @@ Objekt-Sync startet bereits direkt beim Laden der Remote-Seite und nach Geräte-
 der Hintergrundlauf wiederholt sich alle sechs Stunden. Die bestehende Einstellung
 für Objekt-Sync bleibt maßgeblich (Geräte-Login standardmäßig aktiv, persönliche Konten
 nur nach Aktivierung). Eine Erstinstallation ohne Online-Sync hat noch keinen Objektbestand.
-Die versionierte Vorlage `scripts/MainActivity.java` wird beim Projektaufbau in
-`android/app/src/main/java/cloud/einsatzleiter/app/MainActivity.java` kopiert.
+Die einzige Quelle der Activity ist
+`android/app/src/main/java/cloud/einsatzleiter/app/MainActivity.java`.
 Nach Änderungen an `www/` vor einem regulären Build `npx cap copy android` ausführen.
 Ohne Gerät/Emulator können Flugmodus, SW-Kaltstart und Netzwechsel nur im Code geprüft werden.
 

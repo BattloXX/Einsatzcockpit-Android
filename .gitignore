@@ -1,5 +1,22 @@
 node_modules/
-/android/
+# Android sources are versioned; build outputs and cap sync products are not.
+/android/build/
+/android/app/build/
+/android/.gradle/
+/android/local.properties
+/android/app/google-services.json
+/android/ci-artifacts/
+/android/capacitor-cordova-android-plugins/
+/android/capacitor.settings.gradle
+/android/app/capacitor.build.gradle
+/android/app/src/main/assets/public/
+/android/app/src/main/assets/capacitor.config.json
+/android/app/src/main/assets/capacitor.plugins.json
+/android/app/src/main/res/xml/config.xml
+# capacitor-assets generates these from assets/ in CI.
+/assets/icon.png
+/android/app/src/main/res/mipmap-*/ic_launcher*.png
+/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher*.xml
 plugins/sms-gateway/android/build/
 plugins/native-files/android/build/
 *.keystore
@@ -7,3 +24,4 @@ plugins/native-files/android/build/
 google-services.json
 .env
 dist/
+*.jks

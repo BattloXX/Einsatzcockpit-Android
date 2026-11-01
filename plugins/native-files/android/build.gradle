@@ -5,7 +5,7 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     defaultConfig {
-        minSdk 23
+        minSdk (rootProject.ext.has('minSdkVersion') ? rootProject.ext.minSdkVersion : 24)
     }
 
     compileOptions {
