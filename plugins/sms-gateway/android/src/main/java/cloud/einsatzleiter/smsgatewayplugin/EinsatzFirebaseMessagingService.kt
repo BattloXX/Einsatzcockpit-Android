@@ -241,6 +241,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 .build()
             FcmTokenRegistration.httpClient.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
+                    NativeLog.error(applicationContext, "fcm", "push_ack_network", "Push-Bestätigung fehlgeschlagen")
                     SmsGatewayService.log(
                         "Push-Zustellbestaetigung fehlgeschlagen: ${e.javaClass.simpleName}",
                     )
@@ -248,7 +249,9 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
 
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
+                        if (it.isSuccessful) ReportSender.mark(applicationContext, "letzte_push_bestaetigung_at")
                         if (!it.isSuccessful) {
+                            NativeLog.error(applicationContext, "fcm", "push_ack_http", "Push-Bestätigung HTTP ${it.code}")
                             SmsGatewayService.log(
                                 "Push-Zustellbestaetigung fehlgeschlagen (HTTP ${it.code})",
                             )

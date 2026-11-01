@@ -127,7 +127,7 @@ class EinsatzAlarmService : Service() {
             startVibration()
             SmsGatewayService.log("Alarm: Ton und Vibration gestartet")
         } catch (e: Exception) {
-            SmsGatewayService.log("Alarm: Wiedergabe fehlgeschlagen: ${e.javaClass.simpleName}")
+            NativeLog.error(this, "alarm", "playback", "Alarm-Wiedergabe fehlgeschlagen: ${e.javaClass.simpleName}")
             stopAlarm(acknowledged = false)
             return START_NOT_STICKY
         }
@@ -149,7 +149,7 @@ class EinsatzAlarmService : Service() {
             }
             isLooping = true
             setOnErrorListener { _, what, extra ->
-                SmsGatewayService.log("Alarm: Wiedergabefehler $what/$extra")
+                NativeLog.error(this@EinsatzAlarmService, "alarm", "media", "Alarm-Wiedergabefehler $what/$extra")
                 stopAlarm(acknowledged = false)
                 true
             }
@@ -173,7 +173,7 @@ class EinsatzAlarmService : Service() {
     }
 
     private fun foregroundFailed(alarm: Intent, error: Exception) {
-        SmsGatewayService.log("Alarm: FGS verweigert -> Fallback (${error.javaClass.simpleName})")
+        NativeLog.error(this, "alarm", "foreground", "Alarm: FGS verweigert (${error.javaClass.simpleName})")
         releaseAlarm()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         postFallback(this, alarm)

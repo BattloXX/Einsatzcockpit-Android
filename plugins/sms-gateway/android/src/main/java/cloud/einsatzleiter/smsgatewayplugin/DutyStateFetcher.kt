@@ -46,15 +46,19 @@ object DutyStateFetcher {
                         log(reason, Outcome.AUTH_FAILED)
                     }
                     response.code == 401 || response.code == 403 -> {
+                        NativeLog.error(context, "poller", "widget_auth", "Duty-State Anmeldung fehlgeschlagen")
                         EcpWidgetSupport.clearIncident(context)
                         EcpWidgetSupport.clearGslQueue(context)
                         EcpWidgetSupport.clearGslLive(context)
                         log(reason, Outcome.AUTH_FAILED)
                     }
                     response.isSuccessful -> {
-                        val state = response.body?.string()?.let(DutyStateResponse::parse)
+                        val body = response.body?.string()
+                        ReportSender.serverTime(context, body, response.header("Date"))
+                        val state = body?.let(DutyStateResponse::parse)
                             ?: return@use log(reason, Outcome.FAILED, "(ungueltige Antwort)")
                         state.applyToWidget(context)
+                        ReportSender.mark(context, "letzter_poll_ok_at")
                         val partial = (state.hasIncident && state.incident == null) ||
                             (state.hasGslQueue && state.gslQueue == null) ||
                             (state.hasGslLive && state.gslLive == null)

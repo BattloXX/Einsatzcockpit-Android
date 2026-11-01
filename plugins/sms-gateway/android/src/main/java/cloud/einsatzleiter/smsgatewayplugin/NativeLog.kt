@@ -44,10 +44,37 @@ internal object NativeLog {
         }
     }
 
+    fun error(context: Context, component: String, code: String, text: String, severity: String = "error", schedule: Boolean = true) {
+        init(context)
+        synchronized(lock) {
+            runCatching {
+                val previous = errors(context).toMutableList()
+                val masked = DiagnoseReportLogic.mask(text)
+                val index = previous.indexOfFirst { it.component == component && it.code == code && it.text == masked && it.severity == severity }
+                val count = if (index >= 0) previous.removeAt(index).count.toLong().plus(1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt() else 1
+                previous.add(DiagnoseReportLogic.Error(DiagnoseReportLogic.iso(System.currentTimeMillis()), component.take(40), code.take(60), masked, count, severity.take(20)))
+                val json = org.json.JSONArray()
+                previous.takeLast(50).forEach { e -> json.put(org.json.JSONObject().put("ts", e.ts).put("component", e.component).put("code", e.code).put("text", e.text).put("count", e.count).put("severity", e.severity)) }
+                ReportSender.prefs(context).edit().putString("errors", json.toString()).apply()
+                append("[$severity][$component/$code] $masked")
+            }
+        }
+        if (schedule) ReportSender.schedule(context, "error")
+    }
+
+    fun errors(context: Context): List<DiagnoseReportLogic.Error> = synchronized(lock) {
+        runCatching {
+            val array = org.json.JSONArray(ReportSender.prefs(context).getString("errors", "[]"))
+            (0 until array.length()).map { i -> val e = array.getJSONObject(i)
+                DiagnoseReportLogic.Error(e.getString("ts"), e.getString("component"), e.getString("code"), e.getString("text"), e.getInt("count"), e.optString("severity", "error")) }
+        }.getOrDefault(emptyList())
+    }
+
     fun clear() {
         synchronized(lock) {
             try {
                 logFile()?.writeText("")
+                appContext?.let { ReportSender.prefs(it).edit().remove("errors").apply() }
             } catch (_: Exception) {
                 // Best effort, just like append.
             }

@@ -51,12 +51,34 @@ class SmsGatewayPlugin : Plugin() {
         notifyListeners(event, data)
     }
 
+    private val diagnoseSettingsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key in DiagnoseReportLogic.settings || key == EinsatzLivePoller.PREF_BASE_URL) ReportSender.schedule(context, "settings")
+    }
+
+    @PluginMethod
+    fun sendDiagnoseReport(call: PluginCall) {
+        if (ReportSender.schedule(context, "manual")) call.resolve(JSObject().put("queued", true))
+        else call.reject("Bericht konnte nicht zum Versand vorgemerkt werden")
+    }
+
+    @PluginMethod
+    fun getDeviceInfo(call: PluginCall) {
+        val result = JSObject(DiagnoseReportLogic.json(DeviceInfoCollector(context).collect()))
+        val lastSent = ReportSender.prefs(context).getLong("last_sent", 0)
+        result.put("last_sent_at", if (lastSent > 0) DiagnoseReportLogic.iso(lastSent) else org.json.JSONObject.NULL)
+        call.resolve(result)
+    }
+
     override fun load() {
+        NativeLog.init(context)
+        context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(diagnoseSettingsListener)
+        ReportSender.schedule(context, "startup")
         SmsGatewayService.addPluginListener(serviceListener)
     }
 
     override fun handleOnDestroy() {
         SmsGatewayService.removePluginListener(serviceListener)
+        context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(diagnoseSettingsListener)
         super.handleOnDestroy()
     }
 
