@@ -2,6 +2,7 @@
 # Baut die Capacitor-App wie .github/workflows/build-apk.yml (Debug-APK, ohne Keystore,
 # Platzhalter-google-services.json). Danach läuft die Analyse OHNE Netz – SDK, npm- und
 # Gradle-Abhängigkeiten werden hier vollständig geholt.
+# Capacitor 8 benötigt weiterhin JDK 21.
 FROM eclipse-temurin:21-jdk-noble
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -15,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl unzip git python3 xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Node.js 22 (Capacitor 7)
+# Node.js 22 (Capacitor 8: Node.js 22+)
 RUN curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz \
     && mkdir -p /opt/node && tar -xJf /tmp/node.tar.xz -C /opt/node --strip-components=1 && rm /tmp/node.tar.xz
 
