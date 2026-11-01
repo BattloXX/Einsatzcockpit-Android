@@ -25,7 +25,7 @@ class AutoUpdateInstallReceiver : BroadcastReceiver() {
                 // Rueckfrage installieren. PackageInstaller liefert in diesem Fall den
                 // System-Dialog als Intent. Ihn nicht zu starten fuehrte bisher zu der
                 // irrefuehrenden Meldung "Installation fehlgeschlagen".
-                val confirmation = confirmationIntent(intent)
+                val confirmation = Compat.getParcelableExtraCompat(intent, Intent.EXTRA_INTENT, Intent::class.java)
                 if (confirmation == null) {
                     AutoUpdateStatusStore.install(
                         context,
@@ -85,14 +85,6 @@ class AutoUpdateInstallReceiver : BroadcastReceiver() {
             .build()
         notificationManager.notify(UPDATE_NOTIFICATION_ID, notification)
     }
-
-    private fun confirmationIntent(intent: Intent): Intent? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableExtra(Intent.EXTRA_INTENT)
-        }
 
     private companion object {
         const val CHANNEL_ID = "ec_auto_update"

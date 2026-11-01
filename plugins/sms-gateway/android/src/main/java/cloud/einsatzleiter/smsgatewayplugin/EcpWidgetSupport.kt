@@ -292,7 +292,7 @@ object EcpWidgetSupport {
     }
 
     fun isExpanded(options: Bundle): Boolean =
-        options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0) >= 150
+        EcpWidgetLogic.isExpanded(options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0))
 
     fun updateAll(context: Context) {
         val manager = AppWidgetManager.getInstance(context)
@@ -384,8 +384,8 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
             val state = EcpWidgetSupport.incident(context)
             val gsl = EcpWidgetSupport.gslQueue(context)
             val lage = EcpWidgetSupport.gslLive(context)
-            when {
-                state == null && gsl == null && lage == null -> {
+            when (EcpWidgetLogic.display(state != null, gsl != null, lage != null)) {
+                EcpWidgetLogic.Display.EMPTY -> {
                     views.setTextViewText(R.id.einsatz_label, "EINSATZCOCKPIT")
                     views.setTextViewText(R.id.einsatz_title, "Kein aktiver Einsatz")
                     views.setTextViewText(R.id.einsatz_detail, "Der Einsatzstatus wird automatisch aktualisiert.")
@@ -399,9 +399,9 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
                         ?.let { views.setOnClickPendingIntent(R.id.einsatz_root, it) }
                 }
                 // A GSL assignment is more urgent and information-dense than a parallel incident.
-                gsl != null -> renderGsl(context, views, id, gsl)
-                state != null -> renderIncident(context, views, id, options, state, withMap)
-                else -> renderGslLive(context, views, id, lage!!)
+                EcpWidgetLogic.Display.GSL_QUEUE -> renderGsl(context, views, id, gsl!!)
+                EcpWidgetLogic.Display.INCIDENT -> renderIncident(context, views, id, options, state!!, withMap)
+                EcpWidgetLogic.Display.GSL_LIVE -> renderGslLive(context, views, id, lage!!)
             }
             manager.updateAppWidget(id, views)
         }
@@ -448,8 +448,7 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
             state: EcpWidgetSupport.IncidentWidgetState,
             withMap: Boolean = true,
         ) {
-            val kind = if (state.isExercise) "LAUFENDE ÜBUNG" else "LAUFENDER EINSATZ"
-            views.setTextViewText(R.id.einsatz_label, "$kind · ${state.phase.uppercase()}")
+            views.setTextViewText(R.id.einsatz_label, EcpWidgetLogic.incidentLabel(state.isExercise, state.phase))
             views.setTextViewText(R.id.einsatz_title, state.alarmType)
             views.setTextViewText(R.id.einsatz_detail, state.address.ifBlank { "Einsatzdetails öffnen" })
             views.setTextViewText(R.id.einsatz_meldung, state.meldung ?: "")
@@ -492,8 +491,7 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
             id: Int,
             state: EcpWidgetSupport.GslQueueWidgetState,
         ) {
-        val kind = if (state.isExercise) "LAUFENDE ÜBUNG" else "GROSSSCHADENSLAGE"
-        views.setTextViewText(R.id.einsatz_label, "$kind · ${state.lageName}")
+        views.setTextViewText(R.id.einsatz_label, EcpWidgetLogic.gslLabel(state.isExercise, state.lageName))
         views.setTextViewText(R.id.einsatz_title, state.current.bezeichnung)
         views.setTextViewText(R.id.einsatz_detail, state.current.address.ifBlank { "Einsatzstelle öffnen" })
         views.setViewVisibility(R.id.einsatz_meldung, View.GONE)
@@ -546,12 +544,11 @@ class EcpEinsatzWidgetProvider : android.appwidget.AppWidgetProvider() {
             id: Int,
             state: EcpWidgetSupport.GslLiveWidgetState,
         ) {
-        val kind = if (state.isExercise) "LAUFENDE ÜBUNG" else "GROSSSCHADENSLAGE"
-        views.setTextViewText(R.id.einsatz_label, "$kind · ${state.name}")
+        views.setTextViewText(R.id.einsatz_label, EcpWidgetLogic.gslLabel(state.isExercise, state.name))
         views.setTextViewText(R.id.einsatz_title, state.name)
         views.setTextViewText(
             R.id.einsatz_detail,
-            "${state.counts.neu} neu · ${state.counts.inArbeit} in Arbeit · ${state.counts.erledigt} erledigt",
+            EcpWidgetLogic.countsLabel(state.counts),
         )
         views.setViewVisibility(R.id.einsatz_map, View.GONE)
         views.setViewVisibility(R.id.einsatz_maps_button, View.GONE)

@@ -15,10 +15,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import android.os.VibrationAttributes
-import android.os.VibrationEffect
 import android.os.Vibrator
-import android.os.VibratorManager
 import androidx.core.app.ServiceCompat
 import kotlin.math.ceil
 
@@ -163,39 +160,16 @@ class EinsatzAlarmService : Service() {
 
     private fun requestFocus() {
         focusRequested = true
-        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-                .setAudioAttributes(audioAttributes)
-                .setOnAudioFocusChangeListener(focusListener, handler)
-                .build()
-            focusRequest = request
-            audioManager.requestAudioFocus(request)
-        } else {
-            @Suppress("DEPRECATION")
-            audioManager.requestAudioFocus(focusListener, AudioManager.STREAM_ALARM, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+        val result = Compat.requestAlarmFocus(audioManager, audioAttributes, focusListener, handler) {
+            focusRequest = it
         }
         SmsGatewayService.log("Alarm: Audiofokus angefordert ($result)")
     }
 
     private fun startVibration() {
-        val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            getSystemService(VibratorManager::class.java).defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            (getSystemService(Context.VIBRATOR_SERVICE) as Vibrator)
-        }
+        val device = Compat.vibrator(this)
         vibrator = device
-        val pattern = longArrayOf(0, 700, 300, 700, 1000)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            device.vibrate(VibrationEffect.createWaveform(pattern, 0), VibrationAttributes.Builder()
-                .setUsage(VibrationAttributes.USAGE_ALARM).build())
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            @Suppress("DEPRECATION")
-            device.vibrate(VibrationEffect.createWaveform(pattern, 0), audioAttributes)
-        } else {
-            @Suppress("DEPRECATION")
-            device.vibrate(pattern, 0, audioAttributes)
-        }
+        Compat.vibrateAlarm(device, audioAttributes)
     }
 
     private fun foregroundFailed(alarm: Intent, error: Exception) {
@@ -239,12 +213,7 @@ class EinsatzAlarmService : Service() {
         vibrator = null
         restoreOriginalVolume()
         if (focusRequested) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
-            } else {
-                @Suppress("DEPRECATION")
-                audioManager.abandonAudioFocus(focusListener)
-            }
+            Compat.abandonAlarmFocus(audioManager, focusRequest, focusListener)
         }
         focusRequest = null
         focusRequested = false
