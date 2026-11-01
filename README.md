@@ -1,6 +1,6 @@
 # Einsatzcockpit Android-App
 
-Native Android-App für [einsatzcockpit.com](https://einsatzcockpit.com) — ein digitales Einsatzleiter-Werkzeug für Feuerwehren und BOS-Organisationen. (Historischer Name/Domain: einsatzleiter.cloud — seit dem Rebrand nur noch als Übergangs-Redirect aktiv, siehe `capacitor.config.ts`.)
+Native Android-App für [einsatzcockpit.com](https://einsatzcockpit.com) — ein digitales Einsatzleiter-Werkzeug für Feuerwehren und BOS-Organisationen.
 
 Die App ist ein schlanker **Capacitor-Wrapper** um die bestehende Progressive Web App. Sie lädt die PWA direkt vom Server und ergänzt sie um native Android-Funktionen, die im Browser nicht zuverlässig verfügbar sind:
 
@@ -82,8 +82,8 @@ Das `native-bridge.js` im Backend erkennt automatisch, ob es in Capacitor läuft
 ## Voraussetzungen
 
 - **Node.js** 22+
-- **Java** 21 (Capacitor 7 erfordert Java 21; Java 17 reicht nicht)
-- **Android Studio** (empfohlen für lokale Entwicklung / Emulator)
+- **Java** 21 (Capacitor 8 erfordert Java 21; Java 17 reicht nicht)
+- **Android Studio** Otter 2025.2.1+ (für lokale Entwicklung / Emulator)
 - Ein aktives **Firebase-Projekt** (für FCM-Push, kostenlos)
 
 ---
@@ -285,15 +285,17 @@ Beim ersten Start (kein gespeicherter Token) bietet die App vier Anmeldewege:
 
 ## Verwendete Plugins
 
-| Plugin | Zweck |
-|---|---|
-| `@capacitor/push-notifications` | FCM-Push, auch bei geschlossener App |
-| `@capacitor-community/background-geolocation` | GPS im Hintergrund (nur bei aktivem Einsatz) |
-| `@capacitor-community/keep-awake` | Bildschirm aktiv halten (Atemschutz, Screensaver) |
-| `@capacitor-mlkit/barcode-scanning` | QR-Code scannen (Login) |
-| `@capacitor/preferences` | Device-Token sicher speichern |
-| `@capacitor/app` | App-Lifecycle (Vordergrund/Hintergrund) |
-| `@einsatzleiter/sms-gateway-plugin` (lokal, `plugins/sms-gateway/`) | SMS-Gateway, Live-Einsatzstatus, Alarmkanal, eigener FCM-Empfänger — siehe Architektur oben |
+Capacitor Core/Android/CLI: **8.6.0**. `@capacitor/assets` bleibt auf **3.x**.
+
+| Plugin | Version | Zweck |
+|---|---|---|
+| `@capacitor/push-notifications` | 8.1.3 | FCM-Push, auch bei geschlossener App |
+| `@capacitor-community/background-geolocation` | 1.3.1 (Peer: Capacitor >=3) | GPS im Hintergrund (nur bei aktivem Einsatz) |
+| `@capacitor-community/keep-awake` | 8.0.1 | Bildschirm aktiv halten (Atemschutz, Screensaver) |
+| `@capacitor-mlkit/barcode-scanning` | 8.2.2 | QR-Code scannen (Login) |
+| `@capacitor/preferences` | 8.0.1 | Device-Token sicher speichern |
+| `@capacitor/app` | 8.1.2 | App-Lifecycle (Vordergrund/Hintergrund) |
+| `@einsatzleiter/sms-gateway-plugin` (lokal, `plugins/sms-gateway/`) | 1.0.0 (Peer: Capacitor >=8) | SMS-Gateway, Live-Einsatzstatus, Alarmkanal, eigener FCM-Empfänger — siehe Architektur oben |
 
 ---
 

@@ -71,7 +71,7 @@ public class MainActivity extends BridgeActivity {
 
     private void installOfflineHandling() {
         if (bridge == null || bridge.getWebView() == null) return;
-        // Capacitor 7: Unterklasse erhaelt LocalServer-Interception, Navigation,
+        // Capacitor 8: Unterklasse erhaelt LocalServer-Interception, Navigation,
         // Bridge-Reset und Listener der originalen BridgeWebViewClient-Klasse.
         bridge.setWebViewClient(new BridgeWebViewClient(bridge) {
             @Override

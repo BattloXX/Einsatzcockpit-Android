@@ -60,7 +60,7 @@ dependencies {
     // EinsatzLivePlugin greift ueber activity (Plugin-Basisklasse, Typ AppCompatActivity)
     // auf activity?.intent zu - ohne eigene Abhaengigkeit ist der Typ hier nicht auflösbar,
     // auch wenn capacitor-android appcompat transitiv mitbringt (nur implementation-scoped).
-    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation 'com.google.firebase:firebase-messaging:24.1.0'
     implementation 'androidx.work:work-runtime-ktx:2.12.0'
     implementation 'androidx.lifecycle:lifecycle-process:2.11.0'
