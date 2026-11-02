@@ -92,6 +92,8 @@ internal class LocationReportWorker(context: Context, params: WorkerParameters) 
             if (!inputData.getBoolean("force", false) && !LocationReportLogic.due(now, prefs.getLong("last_success", 0))) {
                 return Result.success()
             }
+            if (ServerCapabilities.shouldSkip(context, base, auth, "location")) return Result.success()
+            if (DeviceAccessState.isInvalid(context)) return Result.failure()
             val permission = LocationReport.permissionGranted(context)
             val manager = context.getSystemService(LocationManager::class.java)
             val providerOn = manager?.let { runCatching { it.isLocationEnabled }.getOrDefault(true) } ?: true
@@ -123,6 +125,10 @@ internal class LocationReportWorker(context: Context, params: WorkerParameters) 
                 .header(auth.first, auth.second).post(body.toRequestBody("application/json".toMediaType())).build()
             FcmTokenRegistration.httpClient.newCall(request).execute().use { response ->
                 DeviceAccessState.finalCode(response)?.let { DeviceAccessState.markInvalid(context, it); return Result.failure() }
+                if (ServerCapabilities.rememberUnsupported(context, base, "location", response.code)) {
+                    prefs.edit().remove("last_error").apply()
+                    return Result.success()
+                }
                 if (!response.isSuccessful) {
                     prefs.edit().putString("last_error", "HTTP ${response.code}").apply()
                     NativeLog.error(context, "standort", "http_${response.code}", "Standortmeldung: HTTP ${response.code}", schedule = false)

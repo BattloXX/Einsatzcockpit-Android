@@ -62,6 +62,8 @@ internal class DiagnoseReportWorker(context: Context, params: WorkerParameters) 
             val base = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE).getString(EinsatzLivePoller.PREF_BASE_URL, null)?.trimEnd('/')
                 ?.takeIf { it.isNotBlank() } ?: return Result.failure()
             val auth = FcmTokenRegistration.getAuthHeader(context, base) ?: return Result.failure()
+            if (ServerCapabilities.shouldSkip(context, base, auth, "diagnose_report")) return Result.success()
+            if (DeviceAccessState.isInvalid(context)) return Result.failure()
             val json = ReportSender.report(context)
             if (json.toByteArray(Charsets.UTF_8).size > 64 * 1024) {
                 NativeLog.error(context, "diagnose", "size", "Bericht überschreitet 64 KB", schedule = false)
@@ -70,6 +72,7 @@ internal class DiagnoseReportWorker(context: Context, params: WorkerParameters) 
             val request = DeviceAccessState.withDeviceHeaders(Request.Builder().url("$base/api/v1/device/diagnose-report"))
                 .header(auth.first, auth.second).post(json.toRequestBody("application/json".toMediaType())).build()
             FcmTokenRegistration.httpClient.newCall(request).execute().use { response ->
+                if (ServerCapabilities.rememberUnsupported(context, base, "diagnose_report", response.code)) return Result.success()
                 if (!response.isSuccessful) {
                     NativeLog.error(context, "diagnose", "http_${response.code}", "Bericht: HTTP ${response.code}", schedule = false)
                     return if (response.code == 429 || response.code >= 500) Result.retry() else Result.failure()
