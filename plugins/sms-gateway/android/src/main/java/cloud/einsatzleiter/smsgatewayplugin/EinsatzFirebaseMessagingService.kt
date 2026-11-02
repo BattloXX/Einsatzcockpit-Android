@@ -13,11 +13,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import okhttp3.Call
 import okhttp3.Callback
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import org.json.JSONObject
 import java.io.IOException
 
 /** Empfaengt FCM-Data-Nachrichten auch bei beendeter WebView. */
@@ -232,17 +228,10 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 )
                 return
             }
-            val body = JSONObject()
-                .put("delivery_id", deliveryId)
-                .toString()
-                .toRequestBody("application/json".toMediaType())
-            val request = Request.Builder()
-                .url("$baseUrl/api/v1/device/push-ack")
-                .header(authHeader.first, authHeader.second)
-                .post(body)
-                .build()
+            val request = PushAck.request(baseUrl, authHeader, deliveryId)
             FcmTokenRegistration.httpClient.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
+                    PushAck.schedule(applicationContext, baseUrl, deliveryId)
                     NativeLog.error(applicationContext, "fcm", "push_ack_network", "Push-Bestätigung fehlgeschlagen")
                     SmsGatewayService.log(
                         "Push-Zustellbestaetigung fehlgeschlagen: ${e.javaClass.simpleName}",
@@ -252,6 +241,10 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
                         if (it.isSuccessful) ReportSender.mark(applicationContext, "letzte_push_bestaetigung_at")
+                        if (PushAckLogic.outcome(it.code, 1) == PushAckLogic.Outcome.RETRY) {
+                            PushAck.schedule(applicationContext, baseUrl, deliveryId)
+                        }
+                        DeviceAccessState.finalCode(it)?.let { code -> DeviceAccessState.markInvalid(applicationContext, code) }
                         if (!it.isSuccessful) {
                             NativeLog.error(applicationContext, "fcm", "push_ack_http", "Push-Bestätigung HTTP ${it.code}")
                             SmsGatewayService.log(
@@ -262,6 +255,7 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
                 }
             })
         } catch (e: Exception) {
+            NativeLog.error(applicationContext, "fcm", "push_ack_failed", "Push-Bestätigung nicht startbar: ${e.javaClass.simpleName}")
             SmsGatewayService.log(
                 "Push-Zustellbestaetigung nicht startbar: ${e.javaClass.simpleName}",
             )
