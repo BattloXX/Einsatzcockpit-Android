@@ -19,6 +19,9 @@ import java.util.concurrent.TimeUnit
 
 /** Registriert FCM-Tokens mit der verfuegbaren nativen Anmeldung beim Backend. */
 object FcmTokenRegistration {
+    /** Faehigkeiten dieser App: nativer Alarm und App-Sitzung der Atemschutzueberwachung. */
+    val CAPABILITIES: List<String> = listOf("native_alarm", "asuew")
+
     private const val PREF_DEVICE_STATUS_REPORTING_ENABLED = "ec_device_status_reporting_enabled"
 
     val httpClient: OkHttpClient = OkHttpClient.Builder()
@@ -57,7 +60,7 @@ object FcmTokenRegistration {
 
     fun capabilitiesRegistrationValue(context: Context): String {
         val version = installedAppVersion(context) ?: error("App-Version nicht verfuegbar")
-        return "$version:native_alarm:v2"
+        return "$version:${CAPABILITIES.joinToString(",")}:v3"
     }
 
     fun confirmsNativeAlarm(body: String): Boolean {
@@ -89,7 +92,7 @@ object FcmTokenRegistration {
             val json = JSONObject()
                 .put("token", token)
                 .put("platform", "android")
-                .put("capabilities", JSONArray().put("native_alarm"))
+                .put("capabilities", JSONArray(CAPABILITIES))
             if (isDeviceStatusReportingEnabled(prefs)) {
                 installedAppVersion(context)?.let { json.put("app_version", it) }
             }

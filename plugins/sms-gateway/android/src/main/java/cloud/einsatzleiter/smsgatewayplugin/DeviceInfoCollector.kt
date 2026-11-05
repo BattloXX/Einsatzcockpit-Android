@@ -88,7 +88,7 @@ internal class DeviceInfoCollector(private val context: Context) {
             val prefs = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
             val registered = !prefs.getString("ec_fcm_caps_registered", null).isNullOrBlank()
             val values = linkedMapOf<String, Any?>("poller_laeuft" to EinsatzLivePoller.isRunning, "keepalive" to DeviceKeepaliveService.isRunning,
-                "gateway_verbunden" to SmsGatewayService.isConnected, "fcm_registriert" to registered, "fcm_faehigkeiten" to if (registered) listOf("native_alarm") else emptyList<String>(),
+                "gateway_verbunden" to SmsGatewayService.isConnected, "fcm_registriert" to registered, "fcm_faehigkeiten" to if (registered) FcmTokenRegistration.CAPABILITIES else emptyList<String>(),
                 "device_token_vorhanden" to !prefs.getString("el_device_token", null).isNullOrBlank(), "gateway_token_vorhanden" to !prefs.getString("el_gateway_token", null).isNullOrBlank())
             val times = ReportSender.prefs(context)
             listOf("letzter_poll_ok_at", "letzte_push_bestaetigung_at", "letzter_kontaktsync_at").forEach { key -> if (times.contains(key)) values[key] = DiagnoseReportLogic.iso(times.getLong(key, 0)) }
