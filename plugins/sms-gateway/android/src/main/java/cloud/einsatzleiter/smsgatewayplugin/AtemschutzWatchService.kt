@@ -72,6 +72,8 @@ class AtemschutzWatchService : Service() {
     private var charging: Boolean = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var nextWakeRenewMs: Long = 0L
+    private var scheduledWakeWallMs: Long? = null
+    private var lastSelbsttestElapsedMs: Long? = null
 
     private val tick: Runnable = object : Runnable {
         override fun run() {
@@ -159,6 +161,16 @@ class AtemschutzWatchService : Service() {
         clockElapsedMs = startedElapsedMs
         clockWallMs = System.currentTimeMillis()
         offsetMs = 0L
+        val savedState: Triple<String, Long, Long>? = AsuewStore.loadState(this)
+        if (AsuewStore.incidentId(this) == id && savedState != null &&
+            savedState.second > 0L && savedState.second <= clockWallMs &&
+            clockWallMs - savedState.second < 6 * 60 * 60_000L) {
+            val restored: AsuewState? = AsuewLogic.parseState(savedState.first)
+            if (restored != null && restored.incidentId == id) {
+                state = restored
+                offsetMs = savedState.third
+            }
+        }
         val savedOkMs: Long = AsuewStore.lastOkMs(this)
         lastOkElapsedMs = if (savedOkMs > 0L) startedElapsedMs - (clockWallMs - savedOkMs).coerceAtLeast(0L) else null
         inactiveSinceMs = null
@@ -198,7 +210,15 @@ class AtemschutzWatchService : Service() {
                     receivedWall = System.currentTimeMillis()
                     receivedElapsed = SystemClock.elapsedRealtime()
                 }
-                if (heartbeat && !destroyed && !stopping) beat = api.postHeartbeat(percent, isCharging, null)
+                if (heartbeat && !destroyed && !stopping) {
+                    val testNow: Long = SystemClock.elapsedRealtime()
+                    val previousTest: Long? = lastSelbsttestElapsedMs
+                    val selbsttest: org.json.JSONObject? = if (previousTest == null || testNow - previousTest >= 60_000L) {
+                        lastSelbsttestElapsedMs = testNow
+                        AsuewSelbsttestCollector.collect(this)
+                    } else null
+                    beat = api.postHeartbeat(percent, isCharging, selbsttest)
+                }
             } catch (error: Exception) {
                 NativeLog.append("ASÜW Netzwerk: ${error.javaClass.simpleName}")
             } finally {
@@ -236,6 +256,8 @@ class AtemschutzWatchService : Service() {
                         offsetMs = AsuewLogic.clockOffsetMs(fetch.state.serverTimeMs, wall)
                         clockWallMs = wall
                         clockElapsedMs = elapsed
+                        AsuewStore.saveState(this, fetch.rawJson, wall, offsetMs)
+                        updateWakeAlarm(AsuewLogic.serverNow(wall, offsetMs))
                         saveSuccess(wall, elapsed)
                         fetchSessionFailures = 0
                         if (AsuewTexts.hasActiveTroops(state)) noTroopsSinceMs = null
@@ -284,6 +306,7 @@ class AtemschutzWatchService : Service() {
         }
         safely("WakeLock") { updateWakeLock(hasTroops, now) }
         val serverNow: Long = AsuewLogic.serverNow(clockWallMs + (now - clockElapsedMs), offsetMs)
+        updateWakeAlarm(serverNow)
         val alarms: MutableList<AsuewAlarm> = (state?.let { AsuewLogic.activeAlarms(it, serverNow) } ?: emptyList()).toMutableList()
         if (connection == "verloren") alarms.add(AsuewAlarm(0L, "", "connection_lost", "verbindung:verloren"))
         if (battery == "kritisch") alarms.add(AsuewAlarm(0L, "", "battery_critical", "akku:kritisch"))
@@ -310,6 +333,17 @@ class AtemschutzWatchService : Service() {
         if (fetchSessionFailures > 0 || heartbeatSessionFailures > 0) lines.add("Überwachungssitzung beendet - App öffnen")
         lines.add(AsuewTexts.statusLine(connection, batteryPercent))
         safely("Benachrichtigung") { getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(incidentId, lines)) }
+    }
+
+    @Synchronized
+    private fun updateWakeAlarm(serverNow: Long) {
+        if (destroyed || stopping) return
+        val target: Long? = AsuewScheduling.triggerAtWallMs(
+            state?.let { AsuewLogic.nextWakeupServerMs(it, serverNow) }, offsetMs, System.currentTimeMillis())
+        if (target != scheduledWakeWallMs) {
+            AsuewWakeScheduler.schedule(this, target)
+            scheduledWakeWallMs = target
+        }
     }
 
     private fun readBattery() {
@@ -408,6 +442,8 @@ class AtemschutzWatchService : Service() {
 
     private fun finishWatch() {
         stopping = true
+        synchronized(this) { AsuewWakeScheduler.cancel(this) }
+        scheduledWakeWallMs = null
         local.removeCallbacks(tick)
         local.removeCallbacks(networkTick)
         safely("Deaktivieren") { AsuewStore.deactivate(this) }
@@ -424,6 +460,7 @@ class AtemschutzWatchService : Service() {
 
     override fun onDestroy() {
         destroyed = true
+        synchronized(this) { AsuewWakeScheduler.cancel(this) }
         local.removeCallbacksAndMessages(null)
         network.removeCallbacksAndMessages(null)
         // Auf demselben Thread wie acquire(), damit beim Beenden kein Lock nachträglich entsteht.

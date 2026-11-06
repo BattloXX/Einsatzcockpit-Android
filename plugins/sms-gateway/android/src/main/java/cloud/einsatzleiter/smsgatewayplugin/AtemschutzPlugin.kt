@@ -3,6 +3,8 @@ package cloud.einsatzleiter.smsgatewayplugin
 import android.app.Activity
 import android.content.Intent
 import android.os.Build
+import android.net.Uri
+import android.provider.Settings
 import android.view.WindowManager
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -51,6 +53,77 @@ class AtemschutzPlugin : Plugin() {
             put("battery", state.battery)
             put("alarmCount", state.alarmCount)
         })
+    }
+
+    @PluginMethod
+    fun getSelbsttest(call: PluginCall) {
+        try {
+            call.resolve(JSObject(AsuewSelbsttestCollector.collect(context).toString()))
+        } catch (error: Exception) {
+            logPluginError("Selbsttest", error)
+            call.reject("Selbsttest konnte nicht gelesen werden")
+        }
+    }
+
+    @PluginMethod
+    fun playTestAlarm(call: PluginCall) {
+        try {
+            EinsatzAlarmService.start(context, 0L, "Atemschutz Alarmtest",
+                "Dies ist ein Test des Alarmtons.", "/", isTest = true, previewSeconds = 5, tone = "sirene")
+            call.resolve()
+        } catch (error: Exception) {
+            logPluginError("Alarmtest", error)
+            call.reject("Alarmtest konnte nicht gestartet werden")
+        }
+    }
+
+    @PluginMethod
+    fun confirmAlarmTest(call: PluginCall) {
+        AsuewSelbsttestCollector.confirmAlarmTest(context)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun openSettings(call: PluginCall) {
+        val type: String = call.getString("type") ?: ""
+        val packageUri: Uri = Uri.parse("package:${context.packageName}")
+        val intent: Intent = when (type) {
+            "batterie" -> Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, packageUri)
+            "wecker" -> if (Build.VERSION.SDK_INT >= 31)
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, packageUri)
+                else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri)
+            "vollbild" -> if (Build.VERSION.SDK_INT >= 34)
+                Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, packageUri)
+                else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri)
+            "benachrichtigung" -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            else -> {
+                call.reject("Unbekannter Einstellungstyp")
+                return
+            }
+        }
+        try {
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            call.resolve()
+        } catch (error: Exception) {
+            logPluginError("Einstellungen", error)
+            if (type == "batterie") {
+                try {
+                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    call.resolve()
+                    return
+                } catch (fallbackError: Exception) {
+                    logPluginError("Akku-Einstellungen", fallbackError)
+                }
+            }
+            call.reject("Einstellungen konnten nicht geöffnet werden")
+        }
+    }
+
+    private fun logPluginError(operation: String, error: Exception) {
+        NativeLog.init(context)
+        NativeLog.append("ASÜW $operation: ${error.javaClass.simpleName}")
     }
 
     @PluginMethod

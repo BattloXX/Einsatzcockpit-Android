@@ -30,12 +30,14 @@ class AsuewStoreTest {
         assertEquals("1", prefs.getString("ec_asuew_active", null))
         AsuewStore.saveAcked(context, "1:notfall:100")
         AsuewStore.saveLastOk(context, 1234L)
+        AsuewStore.saveState(context, "{}", 1234L, -5000L)
         AsuewStore.deactivate(context)
         assertFalse(AsuewStore.isActive(context))
         assertNull(AsuewStore.incidentId(context))
         assertEquals("0", prefs.getString("ec_asuew_active", null))
         assertEquals("", AsuewStore.acked(context))
         assertEquals(0L, AsuewStore.lastOkMs(context))
+        assertNull(AsuewStore.loadState(context))
         assertEquals(setOf("el_base_url", "ec_asuew_active"), prefs.all.keys)
         assertEquals("https://einsatzcockpit.com", prefs.getString("el_base_url", null))
     }
@@ -59,8 +61,10 @@ class AsuewStoreTest {
         assertEquals(1_800_000_000_123L, AsuewStore.lastOkMs(context))
         assertEquals("1800000000123", prefs.getString("ec_asuew_last_ok_ms", null))
         AsuewStore.saveAcked(context, "1:notfall:100")
+        AsuewStore.saveState(context, "{}", 1000L, 200L)
         AsuewStore.activate(context, 43L)
         assertEquals(43L, AsuewStore.incidentId(context)!!)
+        assertNull(AsuewStore.loadState(context))
         assertEquals(0L, AsuewStore.lastOkMs(context))
         assertEquals("", AsuewStore.acked(context))
     }
@@ -70,5 +74,42 @@ class AsuewStoreTest {
             .putString("ec_asuew_last_ok_ms", "kaputt").commit()
         assertNull(AsuewStore.incidentId(context))
         assertEquals(0L, AsuewStore.lastOkMs(context))
+    }
+
+    @Test fun stateRoundTripsWithLongTimesAndSignedOffset() {
+        assertNull(AsuewStore.loadState(context))
+        val raw: String = """{"incident_id":42,"troops":[]}"""
+        val wall: Long = 1_800_000_000_123L
+        AsuewStore.saveState(context, raw, wall, -12_345L)
+        assertEquals(Triple(raw, wall, -12_345L), AsuewStore.loadState(context))
+        assertEquals(raw, prefs.getString("ec_asuew_state_json", null))
+        assertEquals(wall.toString(), prefs.getString("ec_asuew_state_wall_ms", null))
+        assertEquals("-12345", prefs.getString("ec_asuew_offset_ms", null))
+        AsuewStore.saveState(context, "{}", wall + 1L, 0L)
+        assertEquals(Triple("{}", wall + 1L, 0L), AsuewStore.loadState(context))
+    }
+
+    @Test fun incompleteOrMalformedStateMetadataIsRejected() {
+        prefs.edit().putString("ec_asuew_state_json", "{}").commit()
+        assertNull(AsuewStore.loadState(context))
+        prefs.edit().putString("ec_asuew_state_wall_ms", "1000").commit()
+        assertNull(AsuewStore.loadState(context))
+        prefs.edit().putString("ec_asuew_offset_ms", "kaputt").commit()
+        assertNull(AsuewStore.loadState(context))
+        prefs.edit().putString("ec_asuew_offset_ms", "0")
+            .putString("ec_asuew_state_wall_ms", "kaputt").commit()
+        assertNull(AsuewStore.loadState(context))
+        prefs.edit().putString("ec_asuew_state_wall_ms", "1000")
+            .remove("ec_asuew_state_json").commit()
+        assertNull(AsuewStore.loadState(context))
+    }
+
+    @Test fun deactivationPreservesConfirmedAlarmTest() {
+        prefs.edit().putString("ec_asuew_alarm_tested_at_ms", "1800000000000").commit()
+        AsuewStore.activate(context, 42L)
+        AsuewStore.saveState(context, "{}", 1000L, 0L)
+        AsuewStore.deactivate(context)
+        assertNull(AsuewStore.loadState(context))
+        assertEquals("1800000000000", prefs.getString("ec_asuew_alarm_tested_at_ms", null))
     }
 }
