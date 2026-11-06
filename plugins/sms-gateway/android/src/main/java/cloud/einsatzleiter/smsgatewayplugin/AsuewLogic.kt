@@ -55,8 +55,123 @@ data class AsuewAlarm(val troopId: Long, val troopName: String, val kind: String
 
 data class AsuewDeadline(val troopId: Long, val kind: String, val atServerMs: Long)
 
+data class AsuewLocalEvent(
+    val troopId: Long,
+    val kind: String,
+    val stufe: String?,
+    val ackKind: String?,
+    val atServerMs: Long,
+)
+
 /** Fristen und Darstellung ohne Geräteuhr oder Android-Zustand. */
 object AsuewLogic {
+    fun isValidLocalEvent(event: AsuewLocalEvent): Boolean =
+        event.troopId > 0L && event.atServerMs > 0L &&
+            event.kind in listOf("kontrolle", "druck", "ack") &&
+            (event.stufe == null || event.stufe in listOf("one_third", "two_third", "frei")) &&
+            (event.ackKind == null || event.ackKind in listOf("max_time", "withdraw")) &&
+            (event.kind != "kontrolle" || event.stufe != null) &&
+            (event.kind != "ack" || event.ackKind != null)
+
+    /** Die Serverkopie bleibt unverändert; lokale Erledigungen gelten nur als Überlagerung. */
+    fun applyLocalEvents(state: AsuewState, events: List<AsuewLocalEvent>): AsuewState {
+        if (events.isEmpty()) return state
+        return state.copy(troops = state.troops.map { original ->
+            var troop: AsuewTroop = original
+            for (event: AsuewLocalEvent in events) {
+                if (event.troopId != troop.id ||
+                    (troop.entryAtMs?.let { event.atServerMs < it } == true)) continue
+                when (event.kind) {
+                    "kontrolle" -> {
+                        val stufe: String = event.stufe ?: continue
+                        if (stufe !in listOf("one_third", "two_third", "frei")) continue
+                        if (!troop.kontrollen.any { it.stufe == stufe && it.art == "funk" }) {
+                            troop = troop.copy(kontrollen = troop.kontrollen +
+                                AsuewKontrolle(stufe, "funk", event.atServerMs, null))
+                        }
+                        val warning: String? = when (stufe) {
+                            "one_third" -> "one_third_due"
+                            "two_third" -> "two_third_due"
+                            else -> null
+                        }
+                        troop = troop.copy(serverWarnings = troop.serverWarnings.filter { it != warning })
+                    }
+                    "druck" -> {
+                        val pressureAt: Long = maxOf(troop.lastPressureAtMs ?: event.atServerMs, event.atServerMs)
+                        troop = troop.copy(lastPressureAtMs = pressureAt)
+                        // Auch veraltete Server-Zeitwarnungen für erledigte Fristen ausblenden.
+                        val entry: Long? = troop.entryAtMs
+                        troop = troop.copy(serverWarnings = troop.serverWarnings.filter { warning ->
+                            val seconds: Long? = when (warning) {
+                                "one_third_due" -> troop.oneThirdSeconds
+                                "two_third_due" -> troop.twoThirdSeconds
+                                else -> null
+                            }
+                            entry == null || seconds == null || pressureAt < entry + seconds * 1000L
+                        })
+                    }
+                    "ack" -> when (event.ackKind) {
+                        "max_time" -> troop = troop.copy(maxTimeAcked = true,
+                            serverWarnings = troop.serverWarnings.filter { it != "max_exceeded" })
+                        "withdraw" -> troop = troop.copy(serverWarnings = troop.serverWarnings.filter { it != "withdraw" })
+                    }
+                }
+            }
+            troop
+        })
+    }
+
+    fun pruneLocalEvents(state: AsuewState, events: List<AsuewLocalEvent>, nowServerMs: Long): List<AsuewLocalEvent> =
+        events.filter { event ->
+            val troop: AsuewTroop? = state.troops.find { it.id == event.troopId }
+            if (troop == null || event.atServerMs <= nowServerMs - 12 * 60 * 60_000L ||
+                (troop.entryAtMs?.let { event.atServerMs < it } == true)) false
+            else when (event.kind) {
+                "kontrolle" -> !troop.kontrollen.any { it.stufe == event.stufe && it.art == "funk" }
+                "druck" -> (troop.lastPressureAtMs ?: Long.MIN_VALUE) < event.atServerMs
+                "ack" -> when (event.ackKind) {
+                    "max_time" -> !troop.maxTimeAcked
+                    "withdraw" -> "withdraw" in troop.serverWarnings
+                    else -> true
+                }
+                else -> true
+            }
+        }
+
+    fun serializeLocalEvents(events: List<AsuewLocalEvent>): String {
+        val result: JSONArray = JSONArray()
+        for (event: AsuewLocalEvent in events.sortedBy { it.atServerMs }.takeLast(200)) {
+            result.put(JSONObject().apply {
+                put("troopId", event.troopId)
+                put("kind", event.kind)
+                put("stufe", event.stufe ?: JSONObject.NULL)
+                put("ackKind", event.ackKind ?: JSONObject.NULL)
+                put("atServerMs", event.atServerMs)
+            })
+        }
+        return result.toString()
+    }
+
+    fun parseLocalEvents(json: String): List<AsuewLocalEvent> = try {
+        val input: JSONTokener = JSONTokener(json)
+        val root: Any = input.nextValue()
+        require(root is JSONArray && input.nextClean() == '\u0000')
+        val result: MutableList<AsuewLocalEvent> = mutableListOf()
+        for (index: Int in 0 until root.length()) {
+            try {
+                val item: JSONObject = root.getJSONObject(index)
+                val event: AsuewLocalEvent = AsuewLocalEvent(
+                    requiredLong(item, "troopId"), requiredString(item, "kind"),
+                    if (item.isNull("stufe")) null else requiredString(item, "stufe"),
+                    if (item.isNull("ackKind")) null else requiredString(item, "ackKind"),
+                    requiredLong(item, "atServerMs"),
+                )
+                if (isValidLocalEvent(event)) result.add(event)
+            } catch (_: Exception) { /* Ungültige Einzelelemente überspringen. */ }
+        }
+        result.sortedBy { it.atServerMs }.takeLast(200)
+    } catch (_: Exception) { emptyList() }
+
     private val severity: List<String> = listOf(
         "notfall", "withdraw", "funk_verloren", "max_exceeded", "two_third_due", "one_third_due",
     )

@@ -43,6 +43,50 @@ class AtemschutzPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun noteLocalEvent(call: PluginCall) {
+        val rawId: Any? = call.data.opt("troopId")
+        val troopId: Long? = if (rawId is String) rawId.toLongOrNull() else eventLong(rawId)
+        val kind: String? = call.data.opt("kind") as? String
+        val rawStufe: Any? = call.data.opt("stufe")
+        val rawAckKind: Any? = call.data.opt("ackKind")
+        val stufe: String? = rawStufe as? String
+        val ackKind: String? = rawAckKind as? String
+        val atMs: Long? = if (call.data.isNull("atMs")) {
+            val offset: Long = AsuewStore.loadState(context)?.third ?: 0L
+            AsuewLogic.serverNow(System.currentTimeMillis(), offset)
+        } else eventLong(call.data.opt("atMs"))
+        if (troopId == null || kind == null || atMs == null ||
+            (!call.data.isNull("stufe") && stufe == null) ||
+            (!call.data.isNull("ackKind") && ackKind == null)) {
+            call.reject("Ungültiges Ereignis")
+            return
+        }
+        val event: AsuewLocalEvent = AsuewLocalEvent(troopId, kind, stufe, ackKind, atMs)
+        if (!AsuewLogic.isValidLocalEvent(event)) {
+            call.reject("Ungültiges Ereignis")
+            return
+        }
+        synchronized(AsuewStore) {
+            val events: List<AsuewLocalEvent> = AsuewLogic.parseLocalEvents(AsuewStore.localEvents(context))
+            val duplicate: Boolean = events.any {
+                it.troopId == event.troopId && it.kind == event.kind &&
+                    it.stufe == event.stufe && it.ackKind == event.ackKind && it.atServerMs == event.atServerMs
+            }
+            if (!duplicate) AsuewStore.saveLocalEvents(context, AsuewLogic.serializeLocalEvents(events + event))
+        }
+        if (AsuewStore.isActive(context)) send(call, AtemschutzWatchService.ACTION_REFRESH)
+        else call.resolve()
+    }
+
+    private fun eventLong(raw: Any?): Long? = when (raw) {
+        is Number -> raw.toString().toLongOrNull()
+            ?: raw.toDouble().takeIf {
+                it.isFinite() && it > 0.0 && it < Long.MAX_VALUE.toDouble() && it % 1.0 == 0.0
+            }?.toLong()
+        else -> null
+    }
+
+    @PluginMethod
     fun getState(call: PluginCall) {
         val state: AsuewWatchSnapshot = AtemschutzWatchService.snapshot
         call.resolve(JSObject().apply {

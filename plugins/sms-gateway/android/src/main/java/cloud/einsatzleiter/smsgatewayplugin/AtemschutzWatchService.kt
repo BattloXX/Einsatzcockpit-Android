@@ -52,6 +52,7 @@ class AtemschutzWatchService : Service() {
     @Volatile private var stopping: Boolean = false
     private var incidentId: Long = 0L
     private var state: AsuewState? = null
+    private var localEvents: List<AsuewLocalEvent> = emptyList()
     private var tracker: AsuewAlarmTracker = AsuewAlarmTracker()
     private var activeAlarms: List<AsuewAlarm> = emptyList()
     private var offsetMs: Long = 0L
@@ -132,6 +133,11 @@ class AtemschutzWatchService : Service() {
                     return@safely
                 }
                 if (incidentId != id) initializeWatch(id)
+                if (action == ACTION_REFRESH) {
+                    localEvents = AsuewLogic.parseLocalEvents(AsuewStore.localEvents(this))
+                    // Sofort lokal bewerten, unabhängig von einem laufenden Netzabruf.
+                    evaluate()
+                }
                 if (action == ACTION_ACK) {
                     // Vor dem Quittieren auch gerade neu fällig gewordene Fristen erfassen.
                     evaluate(fire = false)
@@ -155,6 +161,7 @@ class AtemschutzWatchService : Service() {
     private fun initializeWatch(id: Long) {
         incidentId = id
         state = null
+        localEvents = AsuewLogic.parseLocalEvents(AsuewStore.localEvents(this))
         tracker = AsuewAlarmTracker().apply { restoreAcked(AsuewStore.acked(this@AtemschutzWatchService)) }
         activeAlarms = emptyList()
         startedElapsedMs = SystemClock.elapsedRealtime()
@@ -257,6 +264,13 @@ class AtemschutzWatchService : Service() {
                         clockWallMs = wall
                         clockElapsedMs = elapsed
                         AsuewStore.saveState(this, fetch.rawJson, wall, offsetMs)
+                        // Mit dem Plugin gemeinsam sperren, damit neue Eingaben erhalten bleiben.
+                        synchronized(AsuewStore) {
+                            val storedEvents: List<AsuewLocalEvent> = AsuewLogic.parseLocalEvents(AsuewStore.localEvents(this))
+                            localEvents = AsuewLogic.pruneLocalEvents(fetch.state, storedEvents,
+                                AsuewLogic.serverNow(wall, offsetMs))
+                            AsuewStore.saveLocalEvents(this, AsuewLogic.serializeLocalEvents(localEvents))
+                        }
                         updateWakeAlarm(AsuewLogic.serverNow(wall, offsetMs))
                         saveSuccess(wall, elapsed)
                         fetchSessionFailures = 0
@@ -298,7 +312,8 @@ class AtemschutzWatchService : Service() {
         val nextBattery: String = AsuewLogic.batteryStatus(batteryPercent, charging)
         if (nextBattery != battery && nextBattery in listOf("warnung", "kritisch")) safely("Akkuwarnung") { postBatteryWarning() }
         battery = nextBattery
-        val hasTroops: Boolean = AsuewTexts.hasActiveTroops(state)
+        val effectiveState: AsuewState? = state?.let { AsuewLogic.applyLocalEvents(it, localEvents) }
+        val hasTroops: Boolean = AsuewTexts.hasActiveTroops(effectiveState)
         if (hasTroops) noTroopsSinceMs = null
         if (AsuewTexts.shouldStop(now, inactiveSinceMs, noTroopsSinceMs)) {
             finishWatch()
@@ -307,7 +322,7 @@ class AtemschutzWatchService : Service() {
         safely("WakeLock") { updateWakeLock(hasTroops, now) }
         val serverNow: Long = AsuewLogic.serverNow(clockWallMs + (now - clockElapsedMs), offsetMs)
         updateWakeAlarm(serverNow)
-        val alarms: MutableList<AsuewAlarm> = (state?.let { AsuewLogic.activeAlarms(it, serverNow) } ?: emptyList()).toMutableList()
+        val alarms: MutableList<AsuewAlarm> = (effectiveState?.let { AsuewLogic.activeAlarms(it, serverNow) } ?: emptyList()).toMutableList()
         if (connection == "verloren") alarms.add(AsuewAlarm(0L, "", "connection_lost", "verbindung:verloren"))
         if (battery == "kritisch") alarms.add(AsuewAlarm(0L, "", "battery_critical", "akku:kritisch"))
         if (fetchSessionFailures >= 3 || heartbeatSessionFailures >= 3) alarms.add(AsuewAlarm(0L, "", "session_ended", "sitzung:beendet"))
@@ -329,7 +344,7 @@ class AtemschutzWatchService : Service() {
         }
         AsuewStore.saveAcked(this, tracker.serializeAcked())
         snapshot = AsuewWatchSnapshot(connection, battery, alarms.size)
-        val lines: MutableList<String> = (state?.let { AsuewLogic.notificationLines(it, serverNow) } ?: emptyList()).toMutableList()
+        val lines: MutableList<String> = (effectiveState?.let { AsuewLogic.notificationLines(it, serverNow) } ?: emptyList()).toMutableList()
         if (fetchSessionFailures > 0 || heartbeatSessionFailures > 0) lines.add("Überwachungssitzung beendet - App öffnen")
         lines.add(AsuewTexts.statusLine(connection, batteryPercent))
         safely("Benachrichtigung") { getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(incidentId, lines)) }
@@ -339,7 +354,8 @@ class AtemschutzWatchService : Service() {
     private fun updateWakeAlarm(serverNow: Long) {
         if (destroyed || stopping) return
         val target: Long? = AsuewScheduling.triggerAtWallMs(
-            state?.let { AsuewLogic.nextWakeupServerMs(it, serverNow) }, offsetMs, System.currentTimeMillis())
+            state?.let { AsuewLogic.nextWakeupServerMs(AsuewLogic.applyLocalEvents(it, localEvents), serverNow) },
+            offsetMs, System.currentTimeMillis())
         if (target != scheduledWakeWallMs) {
             AsuewWakeScheduler.schedule(this, target)
             scheduledWakeWallMs = target
