@@ -65,5 +65,20 @@ class BootReceiver : BroadcastReceiver() {
                 SmsGatewayService.log("App-Start nach Boot/Update fehlgeschlagen (${e.javaClass.simpleName})")
             }
         }
+
+        // Eine aktive ASÜW wird nach Boot oder App-Update wieder aufgenommen.
+        try {
+            val incidentId: Long? = AsuewStore.incidentId(context)
+            if (AsuewStore.isActive(context) && incidentId != null && incidentId > 0L) {
+                val watch: Intent = Intent(context, AtemschutzWatchService::class.java).apply {
+                    this.action = AtemschutzWatchService.ACTION_START
+                    putExtra(AtemschutzWatchService.EXTRA_INCIDENT_ID, incidentId)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(watch)
+                else context.startService(watch)
+            }
+        } catch (error: Exception) {
+            NativeLog.append("ASÜW Start nach Boot/Update: ${error.javaClass.simpleName}")
+        }
     }
 }

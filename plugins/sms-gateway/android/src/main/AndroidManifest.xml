@@ -48,6 +48,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
     <application>
 
         <service
@@ -117,12 +119,26 @@
         </service>
 
         <service
+            android:name="cloud.einsatzleiter.smsgatewayplugin.AtemschutzWatchService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false"
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Ueberwacht waehrend eines Atemschutzeinsatzes Fristen, Drucke und Verbindung und loest Alarme aus, auch bei ausgeschaltetem Bildschirm." />
+        </service>
+
+        <service
             android:name="cloud.einsatzleiter.smsgatewayplugin.EinsatzFirebaseMessagingService"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <receiver
+            android:name="cloud.einsatzleiter.smsgatewayplugin.AtemschutzAlarmReceiver"
+            android:exported="false" />
 
         <receiver
             android:name="cloud.einsatzleiter.smsgatewayplugin.BootReceiver"

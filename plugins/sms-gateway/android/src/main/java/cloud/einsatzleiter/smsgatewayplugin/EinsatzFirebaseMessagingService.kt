@@ -20,7 +20,7 @@ import java.io.IOException
 class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
         private const val GENERIC_CHANNEL_ID = "ec_push"
-        private const val GENERIC_NOTIFICATION_ID = 7305
+        private const val GENERIC_NOTIFICATION_ID = 7308
         const val ALARM_FALLBACK_NOTIFICATION_ID = 7306
         private val EINSATZ_PRELOAD_URL_REGEX = Regex("^/einsatz/\\d+(/info)?$")
     }
@@ -95,6 +95,24 @@ class EinsatzFirebaseMessagingService : FirebaseMessagingService() {
             )
         } else {
             SmsGatewayService.log("FCM empfangen: generic")
+        }
+
+        // Dadurch startet beim ersten ASÜW-Alarm auch ein Gerät ohne laufende Überwachung
+        // den Wächter. Der bestehende Alarm-Pfad samt AlarmDedupe bleibt maßgeblich für FCM.
+        val asuewIncidentId: Long? = data["incident_id"]?.toLongOrNull()?.takeIf { it > 0L }
+        if (data["asuew"] == "1" && asuewIncidentId != null) {
+            try {
+                val watch: Intent = Intent(this, AtemschutzWatchService::class.java).apply {
+                    action = if (AsuewStore.isActive(this@EinsatzFirebaseMessagingService) &&
+                        AsuewStore.incidentId(this@EinsatzFirebaseMessagingService) == asuewIncidentId)
+                        AtemschutzWatchService.ACTION_REFRESH else AtemschutzWatchService.ACTION_START
+                    putExtra(AtemschutzWatchService.EXTRA_INCIDENT_ID, asuewIncidentId)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(watch)
+                else startService(watch)
+            } catch (error: Exception) {
+                NativeLog.append("ASÜW Start nach FCM: ${error.javaClass.simpleName}")
+            }
         }
 
         val refresh = Intent(this, DeviceKeepaliveService::class.java).apply {
