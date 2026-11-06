@@ -117,6 +117,16 @@
         </service>
 
         <service
+            android:name="cloud.einsatzleiter.smsgatewayplugin.AtemschutzWatchService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false"
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Ueberwacht waehrend eines Atemschutzeinsatzes Fristen, Drucke und Verbindung und loest Alarme aus, auch bei ausgeschaltetem Bildschirm." />
+        </service>
+
+        <service
             android:name="cloud.einsatzleiter.smsgatewayplugin.EinsatzFirebaseMessagingService"
             android:exported="false">
             <intent-filter>
