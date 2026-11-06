@@ -21,6 +21,7 @@ class AsuewStoreTest {
         assertFalse(AsuewStore.isActive(context))
         assertNull(AsuewStore.incidentId(context))
         assertEquals("", AsuewStore.acked(context))
+        assertEquals("[]", AsuewStore.localEvents(context))
         assertEquals(0L, AsuewStore.lastOkMs(context))
         prefs.edit().putString("el_base_url", "https://einsatzcockpit.com").commit()
         AsuewStore.activate(context, 5_000_000_000L)
@@ -29,12 +30,14 @@ class AsuewStoreTest {
         assertEquals("5000000000", prefs.getString("ec_asuew_incident_id", null))
         assertEquals("1", prefs.getString("ec_asuew_active", null))
         AsuewStore.saveAcked(context, "1:notfall:100")
+        AsuewStore.saveLocalEvents(context, "[{\"troopId\":1}]")
         AsuewStore.saveLastOk(context, 1234L)
         AsuewStore.saveState(context, "{}", 1234L, -5000L)
         AsuewStore.deactivate(context)
         assertFalse(AsuewStore.isActive(context))
         assertNull(AsuewStore.incidentId(context))
         assertEquals("0", prefs.getString("ec_asuew_active", null))
+        assertEquals("[]", AsuewStore.localEvents(context))
         assertEquals("", AsuewStore.acked(context))
         assertEquals(0L, AsuewStore.lastOkMs(context))
         assertNull(AsuewStore.loadState(context))
@@ -62,7 +65,10 @@ class AsuewStoreTest {
         assertEquals("1800000000123", prefs.getString("ec_asuew_last_ok_ms", null))
         AsuewStore.saveAcked(context, "1:notfall:100")
         AsuewStore.saveState(context, "{}", 1000L, 200L)
+        AsuewStore.saveLocalEvents(context, "[{\"troopId\":1}]")
         AsuewStore.activate(context, 43L)
+        assertEquals("[]", AsuewStore.localEvents(context))
+        assertFalse(prefs.contains("ec_asuew_local_events"))
         assertEquals(43L, AsuewStore.incidentId(context)!!)
         assertNull(AsuewStore.loadState(context))
         assertEquals(0L, AsuewStore.lastOkMs(context))
@@ -74,6 +80,16 @@ class AsuewStoreTest {
             .putString("ec_asuew_last_ok_ms", "kaputt").commit()
         assertNull(AsuewStore.incidentId(context))
         assertEquals(0L, AsuewStore.lastOkMs(context))
+    }
+
+    @Test fun localEventsRoundTripThroughPreferences() {
+        val json: String = AsuewLogic.serializeLocalEvents(listOf(
+            AsuewLocalEvent(5_000_000_000L, "druck", null, null, 1_800_000_000_123L)))
+        AsuewStore.saveLocalEvents(context, json)
+        assertEquals(json, AsuewStore.localEvents(context))
+        assertEquals(json, prefs.getString("ec_asuew_local_events", null))
+        AsuewStore.saveLocalEvents(context, "[]")
+        assertEquals("[]", AsuewStore.localEvents(context))
     }
 
     @Test fun stateRoundTripsWithLongTimesAndSignedOffset() {
